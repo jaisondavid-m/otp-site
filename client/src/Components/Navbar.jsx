@@ -29,7 +29,9 @@ function Navbar({ onLogout }) {
     { path: '/', label: 'Home' },
     { path: '/otp', label: 'OTP' },
     { path: '/attendance', label: 'Attendance' },
-	{ path: '/activity', label: 'Activity' },
+    { path: '/activity', label: 'Activity' },
+    { path: '/profile', label: 'Profile' },
+    { path: '/share', label: 'Share' },
   ];
 
   return (
@@ -82,9 +84,8 @@ function Navbar({ onLogout }) {
               {navItems.map((item) => (
                 <li key={item.path}>
                   <button
-                    className={`navbar-link-mobile${
-                      isActive(item.path) ? ' active' : ''
-                    }`}
+                    className={`navbar-link-mobile${isActive(item.path) ? ' active' : ''
+                      }`}
                     onClick={() => handleNavClick(item.path)}
                   >
                     {item.label}

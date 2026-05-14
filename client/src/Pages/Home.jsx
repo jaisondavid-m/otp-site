@@ -1,17 +1,204 @@
 import { useEffect, useState, useRef } from 'react'
-import { getPendingActions } from '../api/auth.js'
+import { getPendingActions, getActivityDetails } from '../api/auth.js'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getInitials(title) {
+	if (!title) return '??'
+	const words = title.replace(/^[\dA-Z]+ - /, '').split(' ')
+	return words
+		.filter((w) => w.length > 2)
+		.slice(0, 2)
+		.map((w) => w[0])
+		.join('')
+		.toUpperCase() || title.slice(0, 2).toUpperCase()
+}
+
+const STATUS_STYLES = {
+	Approved: { bg: 'rgba(79,199,144,0.12)',  color: 'rgba(79,199,144,1)'  },
+	Active:   { bg: 'rgba(232,168,76,0.12)',  color: 'rgba(232,168,76,1)'  },
+	Pending:  { bg: 'rgba(100,160,255,0.12)', color: 'rgba(100,160,255,1)' },
+}
+
+function statusStyle(status) {
+	return STATUS_STYLES[status] ?? { bg: 'rgba(140,146,160,0.12)', color: 'rgba(140,146,160,1)' }
+}
+
+// ─── Detail Modal (shared with Activity page) ─────────────────────────────────
+
+function ActivityDetailModal({ id, onClose }) {
+	const [detail, setDetail] = useState(null)
+	const [loading, setLoading] = useState(true)
+	const [error, setError] = useState('')
+
+	useEffect(() => {
+		document.body.style.overflow = 'hidden'
+		return () => { document.body.style.overflow = '' }
+	}, [])
+
+	useEffect(() => {
+		const handler = (e) => { if (e.key === 'Escape') onClose() }
+		window.addEventListener('keydown', handler)
+		return () => window.removeEventListener('keydown', handler)
+	}, [onClose])
+
+	useEffect(() => {
+		let active = true
+		setLoading(true)
+		setError('')
+		setDetail(null)
+		getActivityDetails(id)
+			.then((res) => { if (active) setDetail(res.data) })
+			.catch((err) => { if (active) setError(err.message || 'Failed to load details') })
+			.finally(() => { if (active) setLoading(false) })
+		return () => { active = false }
+	}, [id])
+
+	const handleBackdrop = (e) => {
+		if (e.target === e.currentTarget) onClose()
+	}
+
+	const { bg, color } = detail ? statusStyle(detail.status) : {}
+
+	return (
+		<div className="modal-backdrop" onClick={handleBackdrop}>
+			<div className="modal-sheet" role="dialog" aria-modal="true">
+				<button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+
+				{loading && (
+					<div className="modal-state">Loading details…</div>
+				)}
+
+				{error && !loading && (
+					<div className="modal-state error">{error}</div>
+				)}
+
+				{detail && !loading && (
+					<>
+						<div className="modal-header">
+							<div
+								className="activity-initials modal-initials"
+								style={{ background: 'rgba(79,199,144,0.1)', borderColor: 'rgba(79,199,144,0.3)', color: 'var(--accent)' }}
+							>
+								{getInitials(detail.title)}
+							</div>
+							<div className="modal-title-block">
+								<span className="activity-card-kicker">{detail.category}</span>
+								<h2>{detail.title}</h2>
+								{detail.description && detail.description !== detail.title && (
+									<p className="activity-card-desc">{detail.description}</p>
+								)}
+							</div>
+							<div className="activity-status-pill" style={{ background: bg, color }}>
+								{detail.status}
+							</div>
+						</div>
+
+						<div className="modal-meta-row">
+							<div className="activity-meta-item">
+								<span>Date</span>
+								<strong>
+									{detail.from_date}
+									{detail.to_date && detail.to_date !== detail.from_date ? ` → ${detail.to_date}` : ''}
+								</strong>
+							</div>
+							<div className="activity-meta-item">
+								<span>Start</span>
+								<strong>{detail.start_time}</strong>
+							</div>
+							<div className="activity-meta-item">
+								<span>End</span>
+								<strong>{detail.end_time}</strong>
+							</div>
+							<div className="activity-meta-item">
+								<span>Score</span>
+								<strong>{detail.score_earned ?? 0}</strong>
+							</div>
+						</div>
+
+						{detail.institute_venue && detail.institute_venue !== '-' && (
+							<div className="modal-section">
+								<span className="modal-section-label">Venue</span>
+								<span>{detail.institute_venue}</span>
+								{detail.institute_block && detail.institute_block !== '-' && (
+									<span className="modal-block-tag">{detail.institute_block}</span>
+								)}
+							</div>
+						)}
+
+						{detail.remarks && detail.remarks !== '-' && (
+							<div className="modal-section">
+								<span className="modal-section-label">Remarks</span>
+								<span>{detail.remarks}</span>
+							</div>
+						)}
+
+						<div className="modal-faculty-row">
+							<img
+								src={detail.user_profile}
+								alt={detail.user_name}
+								className="activity-user-avatar"
+								onError={(e) => { e.currentTarget.style.display = 'none' }}
+							/>
+							<div>
+								<div className="activity-user-name">{detail.user_name}</div>
+								<div className="activity-user-id">{detail.user_id}</div>
+							</div>
+						</div>
+
+						{detail.survey?.length > 0 && (
+							<div className="modal-surveys">
+								<span className="modal-section-label">Surveys</span>
+								{detail.survey.map((s) => (
+									<div key={s.survey_id} className="modal-survey-item">
+										<span>{s.survey_name}</span>
+										<div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+											<span className="modal-survey-count">{s.questions_count} Qs</span>
+											<span
+												className="activity-status-pill"
+												style={s.completed
+													? { background: 'rgba(79,199,144,0.12)', color: 'rgba(79,199,144,1)' }
+													: { background: 'rgba(232,168,76,0.12)',  color: 'rgba(232,168,76,1)'  }
+												}
+											>
+												{s.completed ? 'Done' : 'Pending'}
+											</span>
+										</div>
+									</div>
+								))}
+							</div>
+						)}
+
+						{detail.sub_activities?.length > 0 && (
+							<div className="modal-surveys">
+								<span className="modal-section-label">Sub-activities</span>
+								{detail.sub_activities.map((sa, i) => (
+									<div key={i} className="modal-survey-item">
+										<span>{sa.title ?? sa.name ?? JSON.stringify(sa)}</span>
+									</div>
+								))}
+							</div>
+						)}
+					</>
+				)}
+			</div>
+		</div>
+	)
+}
+
+// ─── Home Page ────────────────────────────────────────────────────────────────
 
 function Home() {
 	const [activities, setActivities] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState('')
 	const [query, setQuery] = useState('')
+	const [selectedId, setSelectedId] = useState(null)
 	const activeRef = useRef(true)
 
 	const loadActivities = async () => {
 		setLoading(true)
 		setError('')
-
 		try {
 			const response = await getPendingActions()
 			if (!activeRef.current) return
@@ -28,26 +215,13 @@ function Home() {
 	useEffect(() => {
 		activeRef.current = true
 		loadActivities()
-		return () => {
-			activeRef.current = false
-		}
+		return () => { activeRef.current = false }
 	}, [])
-
-	const handleRefresh = () => {
-		loadActivities()
-	}
-
-	const handleMarkDone = (id) => {
-		setActivities((prev) => prev.map(a => a.id === id ? { ...a, status: 'Done' } : a))
-	}
 
 	const formatDate = (d) => {
 		if (!d) return '--'
-		try {
-			return new Date(d).toLocaleDateString()
-		} catch {
-			return d
-		}
+		try { return new Date(d).toLocaleDateString() }
+		catch { return d }
 	}
 
 	const initialsFromName = (name) => {
@@ -71,6 +245,7 @@ function Home() {
 							<span className="home-item-count">{activities.length} items</span>
 						</div>
 					</div>
+
 					<div className="home-controls">
 						<input
 							aria-label="Search activities"
@@ -80,7 +255,7 @@ function Home() {
 							className="home-search"
 						/>
 						<div className="home-controls-actions">
-							<button className="btn btn-ghost" onClick={handleRefresh}>Refresh</button>
+							<button className="btn btn-ghost" onClick={loadActivities}>Refresh</button>
 						</div>
 					</div>
 
@@ -103,18 +278,22 @@ function Home() {
 					) : (
 						<div className="home-feed-grid">
 							{filtered.map((activity) => {
-								const responseCount = Array.isArray(activity.survey_responses) ? activity.survey_responses.length : 0
+								const responseCount = Array.isArray(activity.survey_responses)
+									? activity.survey_responses.length : 0
 								const actionTypeLabel = Array.isArray(activity.action_type) && activity.action_type.length > 0
-									? activity.action_type.join(', ')
-									: 'No action type'
+									? activity.action_type.join(', ') : 'No action type'
 
 								return (
-									<article key={activity.id} className="home-feed-card compact">
+									<article
+										key={activity.id}
+										className="home-feed-card compact"
+										onClick={() => setSelectedId(activity.id)}
+										style={{ cursor: 'pointer' }}
+									>
 										<div className="home-feed-card-header compact">
 											<div className="home-avatar-wrap compact">
 												<div className="home-initials">{initialsFromName(activity.user_name)}</div>
 											</div>
-
 											<div className="home-feed-title-block">
 												<div className="home-feed-kicker">{activity.category || 'Activity'}</div>
 												<h3>{activity.title || 'Untitled activity'}</h3>
@@ -158,6 +337,10 @@ function Home() {
 					)}
 				</div>
 			</section>
+
+			{selectedId !== null && (
+				<ActivityDetailModal id={selectedId} onClose={() => setSelectedId(null)} />
+			)}
 		</main>
 	)
 }

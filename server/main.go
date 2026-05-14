@@ -68,6 +68,16 @@ func main() {
 		api.GET("/attendance", h.ProxyAttendance)
 		api.GET("/pending-action", h.ProxyPendingAction)
 		api.GET("/activity", h.ProxyActivity)
+		api.GET("/activity/details", h.ProxyActivityDetails)
+		api.GET("/profile", h.ProxyProfile)
+		api.POST("/share/create", h.CreateShareToken)
+		api.DELETE("/share/revoke", h.RevokeShareToken)
+	}
+
+	share := r.Group("/share")
+	{
+		share.GET("/:token/info", h.ShareTokenInfo) // frontend checks validity
+		share.POST("/:token/otp", h.ShareProxyOTP)  // anyone submits OTP
 	}
 
 	port := os.Getenv("PORT")

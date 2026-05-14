@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import AuthPage from './Pages/AuthPage.jsx'
-import Home from './Pages/Home.jsx'
-import OTP from './Pages/OTP.jsx'
-import Attendance from './Pages/Attendance.jsx'
-import Navbar from './Components/Navbar.jsx'
-import { logoutUser } from './api/auth.js'
-import Activity from './Pages/Activity.jsx'
+import AuthPage from '../Pages/AuthPage.jsx'
+import Home from '../Pages/Home.jsx'
+import OTP from '../Pages/OTP.jsx'
+import Attendance from '../Pages/Attendance.jsx'
+import Navbar from '../Components/Navbar.jsx'
+import { logoutUser } from '../api/auth.js'
+import Activity from '../Pages/Activity.jsx'
+import Profile from '../Pages/Profile.jsx'
+import ShareManage from '../Pages/ShareManage.jsx'
+import ShareOTP from '../Pages/ShareOTP.jsx'
 
 function PrivateRoute({ children, isAuthenticated }) {
 	return isAuthenticated ? children : <Navigate to="/auth" replace />
@@ -63,9 +66,9 @@ function App() {
 	return (
 		<Layout isAuthenticated={isAuthenticated} onLogout={handleLogout}>
 			<Routes>
-				<Route 
-					path="/auth" 
-					element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage onAuthSuccess={handleAuthSuccess} />} 
+				<Route
+					path="/auth"
+					element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage onAuthSuccess={handleAuthSuccess} />}
 				/>
 				<Route
 					path="/"
@@ -83,11 +86,11 @@ function App() {
 						</PrivateRoute>
 					}
 				/>
-        <Route path="/activity" element={
-          <PrivateRoute isAuthenticated={isAuthenticated}>
-							<Activity />
+				<Route path="/activity" element={
+					<PrivateRoute isAuthenticated={isAuthenticated}>
+						<Activity />
 					</PrivateRoute>
-        } />
+				} />
 
 				<Route
 					path="/attendance"
@@ -97,6 +100,22 @@ function App() {
 						</PrivateRoute>
 					}
 				/>
+				<Route
+					path="/profile"
+					element={
+						<PrivateRoute isAuthenticated={isAuthenticated}>
+							<Profile />
+						</PrivateRoute>
+					}
+				/>
+				<Route path="/share" element={
+						<PrivateRoute isAuthenticated={isAuthenticated}>
+							<ShareManage />
+						</PrivateRoute>
+					} />
+					
+				<Route path="/share/:token" element={<ShareOTP />} />
+
 				<Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/auth"} replace />} />
 			</Routes>
 		</Layout>

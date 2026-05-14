@@ -48,6 +48,14 @@ func psActivityEndpoint() string {
 	return getEnv("PS_ACTIVITY_ENDPOINT", "")
 }
 
+func psProfileEndpoint() string {
+	return getEnv("PS_PROFILE_ENDPOINT", "")
+}
+
+func psActivityDetailsEndpoint() string {
+	return getEnv("PS_ACTIVITY_DETAILS_ENDPOINT", "")
+}
+
 func getEnv(key, fallback string) string {
 	v := os.Getenv(key)
 	if v == "" {
@@ -56,7 +64,15 @@ func getEnv(key, fallback string) string {
 	return v
 }
 
+func psShareOTPEndpoint() string {
+	return getEnv("PS_QR_OTP_ENDPOINT", "") // reuses same upstream endpoint
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type CreateShareRequest struct {
+	TTLMinutes int `json:"ttl_minutes"`
+}
 
 type RegisterRequest struct {
 	DeviceID string `json:"device_id" binding:"required"`
@@ -302,6 +318,58 @@ func (h *Handler) ProxyAttendance(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
+
+// ─── Activity Details Proxy ───────────────────────────────────────────────────
+// GET /api/activity/details?id=<id>
+// Requires valid session token. Fetches activity details from bitsathy API.
+
+func (h *Handler) ProxyActivityDetails(c *gin.Context) {
+	id := c.Query("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id query parameter is required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	upstreamURL := fmt.Sprintf(
+		"%s?id=%s",
+		buildPSURL(psActivityDetailsEndpoint()),
+		id,
+	)
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+
 // ─── Pending Action Proxy ─────────────────────────────────────────────────────
 // GET /api/pending-action?today=yes
 // Requires valid session token. Fetches pending actions from bitsathy API.
@@ -397,6 +465,218 @@ func (h *Handler) ProxyActivity(c *gin.Context) {
 	}
 
 	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Profile Proxy ────────────────────────────────────────────────────────────
+// GET /api/profile
+// Requires valid session token. Fetches user profile from bitsathy API.
+
+func (h *Handler) ProxyProfile(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	upstreamURL := buildPSURL(psProfileEndpoint())
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Create Share Token ───────────────────────────────────────────────────────
+// POST /api/share/create
+// Requires valid session. Returns a one-time share token + link.
+
+func (h *Handler) CreateShareToken(c *gin.Context) {
+	deviceID := c.GetString("device_id")
+
+	var req CreateShareRequest
+	_ = c.ShouldBindJSON(&req)
+
+	var expiresAt time.Time
+	if req.TTLMinutes <= 0 {
+		// "never" — 100 years from now
+		expiresAt = time.Now().AddDate(100, 0, 0)
+	} else {
+		expiresAt = time.Now().Add(time.Duration(req.TTLMinutes) * time.Minute)
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate share token"})
+		return
+	}
+
+	_, err = h.DB.Exec(`
+		INSERT INTO share_tokens (token, device_id, expires_at)
+		VALUES (?, ?, ?)
+		ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)
+	`, token, deviceID, expiresAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save share token"})
+		return
+	}
+
+	frontendBase := getEnv("FRONTEND_BASE_URL", "http://localhost:5173")
+
+	c.JSON(http.StatusOK, gin.H{
+		"share_token": token,
+		"expires_at":  expiresAt.Format(time.RFC3339),
+		"link":        fmt.Sprintf("%s/share/%s", frontendBase, token),
+		"permanent":   req.TTLMinutes <= 0,
+	})
+}
+
+// ─── Revoke Share Token ───────────────────────────────────────────────────────
+// DELETE /api/share/revoke
+// Requires valid session. Deletes all share tokens for this device.
+
+func (h *Handler) RevokeShareToken(c *gin.Context) {
+	deviceID := c.GetString("device_id")
+
+	res, err := h.DB.Exec(`DELETE FROM share_tokens WHERE device_id = ?`, deviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke share tokens"})
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	c.JSON(http.StatusOK, gin.H{"revoked": rows})
+}
+
+// ─── Share OTP (public, no session needed) ────────────────────────────────────
+// POST /share/:token/otp
+// No auth required. Validates share token, proxies OTP upstream using owner's cookies.
+
+func (h *Handler) ShareProxyOTP(c *gin.Context) {
+	shareToken := c.Param("token")
+	if shareToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "share token is required"})
+		return
+	}
+
+	// Validate share token and load owner's credentials
+	var deviceID, psCookie string
+	var expiresAt time.Time
+	err := h.DB.QueryRow(`
+		SELECT st.device_id, u.ps_cookie, st.expires_at
+		FROM share_tokens st
+		JOIN users u ON u.device_id = st.device_id
+		WHERE st.token = ?
+	`, shareToken).Scan(&deviceID, &psCookie, &expiresAt)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "invalid or expired share link"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if time.Now().After(expiresAt) {
+		// Clean up expired token
+		h.DB.Exec(`DELETE FROM share_tokens WHERE token = ?`, shareToken)
+		c.JSON(http.StatusGone, gin.H{"error": "share link has expired"})
+		return
+	}
+
+	var req OTPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "otp is required"})
+		return
+	}
+
+	body, _ := json.Marshal(map[string]string{"otp": req.OTP})
+
+	upstreamURL := buildPSURL(psQROTPEndpoint())
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Share Token Info (public) ────────────────────────────────────────────────
+// GET /share/:token/info
+// No auth required. Returns validity + expiry so the frontend can show a proper UI.
+
+func (h *Handler) ShareTokenInfo(c *gin.Context) {
+	shareToken := c.Param("token")
+
+	var deviceID string
+	var expiresAt time.Time
+	err := h.DB.QueryRow(`
+		SELECT device_id, expires_at FROM share_tokens WHERE token = ?
+	`, shareToken).Scan(&deviceID, &expiresAt)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"valid": false, "error": "share link not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"valid": false, "error": "database error"})
+		return
+	}
+	if time.Now().After(expiresAt) {
+		h.DB.Exec(`DELETE FROM share_tokens WHERE token = ?`, shareToken)
+		c.JSON(http.StatusGone, gin.H{"valid": false, "error": "share link has expired"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"valid":      true,
+		"device_id":  deviceID,
+		"expires_at": expiresAt.Format(time.RFC3339),
+	})
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
