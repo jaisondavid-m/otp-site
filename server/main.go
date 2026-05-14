@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+  "time"
 
 	"server/config"
 	"server/handlers"
@@ -84,6 +85,25 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+ 	r.GET("/health", func(c *gin.Context) {
+		// Check DB connection
+		if err := db.Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":  "down",
+				"database": "disconnected",
+				"error":   err.Error(),
+				"time":    time.Now().Format(time.RFC3339),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "ok",
+			"database": "connected",
+			"time":     time.Now().Format(time.RFC3339),
+		})
+	})
+
 
 	log.Printf("Server running on :%s", port)
 	r.Run(":" + port)
