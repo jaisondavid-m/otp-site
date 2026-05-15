@@ -33,32 +33,32 @@ function ShareOTP() {
 
 	// Digit input handlers (same pattern as your OTP page)
 	const handleDigitChange = (index, value) => {
-	const cleaned = value.replace(/\D/g, '')
+		const cleaned = value.replace(/\D/g, '')
 
-	// Full OTP pasted/typed
-	if (cleaned.length > 1) {
-		const next = cleaned.slice(0, 6).split('')
+		// Full OTP pasted/typed
+		if (cleaned.length > 1) {
+			const next = cleaned.slice(0, 6).split('')
 
-		while (next.length < 6) {
-			next.push('')
+			while (next.length < 6) {
+				next.push('')
+			}
+
+			setDigits(next)
+
+			const focusIndex = Math.min(cleaned.length, 5)
+			inputRefs.current[focusIndex]?.focus()
+			return
 		}
 
+		// Single digit
+		const next = [...digits]
+		next[index] = cleaned
 		setDigits(next)
 
-		const focusIndex = Math.min(cleaned.length, 5)
-		inputRefs.current[focusIndex]?.focus()
-		return
+		if (cleaned && index < 5) {
+			inputRefs.current[index + 1]?.focus()
+		}
 	}
-
-	// Single digit
-	const next = [...digits]
-	next[index] = cleaned
-	setDigits(next)
-
-	if (cleaned && index < 5) {
-		inputRefs.current[index + 1]?.focus()
-	}
-}
 
 	const handleDigitKeyDown = (index, e) => {
 		if (e.key === 'Backspace' && !digits[index] && index > 0) {
@@ -162,10 +162,6 @@ function ShareOTP() {
 						</div>
 
 						<p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-							You're submitting an OTP on behalf of{' '}
-							<span style={{ color: 'var(--text-accent)', fontFamily: 'var(--font-mono)' }}>
-								{info.device_id}
-							</span>
 							. Enter the 6-digit code shown on their screen.
 						</p>
 
@@ -189,32 +185,32 @@ function ShareOTP() {
 
 							<div className="otp-actions">
 								<div style={{ display: 'flex', gap: 10 }}>
-	<button
-		type="button"
-		className="btn btn-ghost"
-		onClick={() => {
-			setDigits(['', '', '', '', '', ''])
-			setMessage(null)
-			inputRefs.current[0]?.focus()
-		}}
-		disabled={submitting}
-		style={{ flex: 1 }}
-	>
-		Clear OTP
-	</button>
+									<button
+										type="button"
+										className="btn btn-ghost"
+										onClick={() => {
+											setDigits(['', '', '', '', '', ''])
+											setMessage(null)
+											inputRefs.current[0]?.focus()
+										}}
+										disabled={submitting}
+										style={{ flex: 1 }}
+									>
+										Clear OTP
+									</button>
 
-	<button
-		type="button"
-		className="otp-submit-btn"
-		onClick={handleSubmit}
-		disabled={!isComplete || submitting}
-		style={{ flex: 2 }}
-	>
-		{submitting
-			? <><span className="btn-spinner">⟳</span> Submitting…</>
-			: 'Submit OTP'}
-	</button>
-</div>
+									<button
+										type="button"
+										className="otp-submit-btn"
+										onClick={handleSubmit}
+										disabled={!isComplete || submitting}
+										style={{ flex: 2 }}
+									>
+										{submitting
+											? <><span className="btn-spinner">⟳</span> Submitting…</>
+											: 'Submit OTP'}
+									</button>
+								</div>
 
 								{message && (
 									<div className={`otp-message ${message.type}`}>
