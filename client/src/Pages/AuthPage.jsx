@@ -81,7 +81,7 @@ function AuthPage({ onAuthSuccess }) {
 
           <form className="auth-form" onSubmit={submitForm}>
             <label>
-              <span>Device ID</span>
+              <span>User Name</span>
               <input
                 name="device_id"
                 value={form.device_id}
@@ -94,7 +94,7 @@ function AuthPage({ onAuthSuccess }) {
             </label>
 
             <label>
-              <span>PS Cookie</span>
+              <span>Password</span>
               <input
                 name="ps_cookie"
                 value={form.ps_cookie}

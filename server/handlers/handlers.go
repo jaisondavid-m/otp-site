@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -71,7 +72,8 @@ func psShareOTPEndpoint() string {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CreateShareRequest struct {
-	TTLMinutes int `json:"ttl_minutes"`
+	TTLMinutes int    `json:"ttl_minutes"`
+	CustomCode string `json:"custom_code"`
 }
 
 type RegisterRequest struct {
@@ -97,6 +99,12 @@ func generateToken() (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+func normalizeShareCode(code string) string {
+	return strings.ToLower(strings.TrimSpace(code))
+}
+
+var shareCodePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$`)
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 // POST /auth/register
@@ -318,7 +326,6 @@ func (h *Handler) ProxyAttendance(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
-
 // ─── Activity Details Proxy ───────────────────────────────────────────────────
 // GET /api/activity/details?id=<id>
 // Requires valid session token. Fetches activity details from bitsathy API.
@@ -368,7 +375,6 @@ func (h *Handler) ProxyActivityDetails(c *gin.Context) {
 
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
-
 
 // ─── Pending Action Proxy ─────────────────────────────────────────────────────
 // GET /api/pending-action?today=yes
@@ -516,6 +522,11 @@ func (h *Handler) CreateShareToken(c *gin.Context) {
 
 	var req CreateShareRequest
 	_ = c.ShouldBindJSON(&req)
+	customCode := normalizeShareCode(req.CustomCode)
+	if customCode != "" && !shareCodePattern.MatchString(customCode) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "custom code must be 3-32 characters using lowercase letters, numbers, or hyphens"})
+		return
+	}
 
 	var expiresAt time.Time
 	if req.TTLMinutes <= 0 {
@@ -525,18 +536,48 @@ func (h *Handler) CreateShareToken(c *gin.Context) {
 		expiresAt = time.Now().Add(time.Duration(req.TTLMinutes) * time.Minute)
 	}
 
-	token, err := generateToken()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate share token"})
+	token := customCode
+	if token == "" {
+		var err error
+		token, err = generateToken()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate share token"})
+			return
+		}
+	}
+
+	if customCode != "" {
+		var existingDeviceID string
+		err := h.DB.QueryRow(`SELECT device_id FROM share_tokens WHERE token = ?`, token).Scan(&existingDeviceID)
+		if err == nil && existingDeviceID != deviceID {
+			c.JSON(http.StatusConflict, gin.H{"error": "that custom code is already in use"})
+			return
+		}
+		if err != nil && err != sql.ErrNoRows {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+	}
+
+	if _, err := h.DB.Exec(`DELETE FROM share_tokens WHERE device_id = ?`, deviceID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to clear previous share token"})
 		return
 	}
 
-	_, err = h.DB.Exec(`
+	_, err := h.DB.Exec(`
 		INSERT INTO share_tokens (token, device_id, expires_at)
 		VALUES (?, ?, ?)
-		ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)
 	`, token, deviceID, expiresAt)
 	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			if customCode != "" {
+				c.JSON(http.StatusConflict, gin.H{"error": "that custom code is already in use"})
+				return
+			}
+
+			c.JSON(http.StatusConflict, gin.H{"error": "failed to generate a unique share token, please try again"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save share token"})
 		return
 	}

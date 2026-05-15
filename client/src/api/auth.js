@@ -103,8 +103,11 @@ export function getActivityDetails(id) {
 
 // ─── Share ────────────────────────────────────────────────────────────────────
 
-export function createShareToken(ttlMinutes = 30) {
-  return postJson('/api/share/create', { ttl_minutes: ttlMinutes })
+export function createShareToken(ttlMinutes = 30, customCode = '') {
+  return postJson('/api/share/create', {
+    ttl_minutes: ttlMinutes,
+    custom_code: customCode,
+  })
 }
 
 export function revokeShareToken() {

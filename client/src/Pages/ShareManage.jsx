@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { createShareToken, revokeShareToken } from '../api/auth.js'
 
 function ShareManage() {
     const [shareData, setShareData] = useState(null)   // { share_token, expires_at, link }
     const [ttl, setTtl] = useState(30)
+    const [shareCode, setShareCode] = useState('')
     const [loading, setLoading] = useState(false)
     const [revoking, setRevoking] = useState(false)
     const [error, setError] = useState('')
@@ -13,8 +14,9 @@ function ShareManage() {
         setLoading(true)
         setError('')
         try {
-            const res = await createShareToken(ttl)
+            const res = await createShareToken(ttl, shareCode)
             setShareData(res)
+            setShareCode(res.share_token || shareCode)
         } catch (err) {
             setError(err.message || 'Failed to create share link')
         } finally {
@@ -50,15 +52,11 @@ function ShareManage() {
         { label: 'Never', value: 0 },
     ]
 
-    const expiresIn = shareData
-        ? shareData.permanent
-            ? 'Never expires'
-            : (() => {
-                const diff = Math.max(0, new Date(shareData.expires_at) - Date.now())
-                const mins = Math.floor(diff / 60000)
-                return mins > 0 ? `${mins} min` : 'Expired'
-            })()
-        : null
+    const expiresAtLabel = shareData?.permanent
+        ? 'Never expires'
+        : shareData?.expires_at
+            ? new Date(shareData.expires_at).toLocaleString()
+            : null
 
     return (
         <main className="activity-shell">
@@ -72,6 +70,22 @@ function ShareManage() {
                     <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: -8 }}>
                         Generate a temporary link so someone else can submit an OTP on your behalf — no account needed on their end.
                     </p>
+
+                    <label className="share-code-field">
+                        <span className="share-code-label">Custom share code</span>
+                        <input
+                            type="text"
+                            className="share-code-input"
+                            value={shareCode}
+                            onChange={(e) => setShareCode(e.target.value)}
+                            placeholder="e.g. batch-7"
+                            autoComplete="off"
+                            spellCheck="false"
+                        />
+                        <p className="share-code-hint">
+                            Leave this empty to generate a random link. Use only letters, numbers, or hyphens.
+                        </p>
+                    </label>
 
                     {/* TTL Selector */}
                     <div className="share-ttl-row">
@@ -98,7 +112,7 @@ function ShareManage() {
                             <div className="share-link-header">
                                 <span className="share-link-badge">Active link</span>
                                 <span className="share-link-ttl">
-                                    {shareData.permanent ? '∞ No expiry' : `⏱ ${expiresIn} remaining`}
+                                    {shareData.permanent ? '∞ No expiry' : `⏱ Expires ${expiresAtLabel}`}
                                 </span>
                             </div>
                             <div className="share-link-box">
