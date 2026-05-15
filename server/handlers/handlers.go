@@ -30,31 +30,31 @@ func buildPSURL(path string) string {
 }
 
 func psBaseURL() string {
-	return getEnv("PS_BASE_URL", "")
+	return getEnv("BASE_URL", "")
 }
 
 func psQROTPEndpoint() string {
-	return getEnv("PS_QR_OTP_ENDPOINT", "")
+	return getEnv("QR_OTP_ENDPOINT", "")
 }
 
 func psAttendanceEndpoint() string {
-	return getEnv("PS_ATTENDANCE_ENDPOINT", "")
+	return getEnv("ATTENDANCE_ENDPOINT", "")
 }
 
 func psPendingEndpoint() string {
-	return getEnv("PS_PENDING_ACTION_ENDPOINT", "")
+	return getEnv("PENDING_ACTION_ENDPOINT", "")
 }
 
 func psActivityEndpoint() string {
-	return getEnv("PS_ACTIVITY_ENDPOINT", "")
+	return getEnv("ACTIVITY_ENDPOINT", "")
 }
 
 func psProfileEndpoint() string {
-	return getEnv("PS_PROFILE_ENDPOINT", "")
+	return getEnv("PROFILE_ENDPOINT", "")
 }
 
 func psActivityDetailsEndpoint() string {
-	return getEnv("PS_ACTIVITY_DETAILS_ENDPOINT", "")
+	return getEnv("ACTIVITY_DETAILS_ENDPOINT", "")
 }
 
 func getEnv(key, fallback string) string {
@@ -66,7 +66,7 @@ func getEnv(key, fallback string) string {
 }
 
 func psShareOTPEndpoint() string {
-	return getEnv("PS_QR_OTP_ENDPOINT", "") // reuses same upstream endpoint
+	return getEnv("QR_OTP_ENDPOINT", "") // reuses same upstream endpoint
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
