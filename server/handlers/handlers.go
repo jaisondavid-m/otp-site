@@ -582,7 +582,7 @@ func (h *Handler) CreateShareToken(c *gin.Context) {
 		return
 	}
 
-	frontendBase := getEnv("FRONTEND_BASE_URL", "http://localhost:5173")
+	frontendBase := getEnv("FRONTEND_BASE_URL", "https://pcdp.bitsathy.in")
 
 	c.JSON(http.StatusOK, gin.H{
 		"share_token": token,

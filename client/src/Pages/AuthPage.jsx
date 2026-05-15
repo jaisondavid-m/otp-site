@@ -57,8 +57,8 @@ function AuthPage({ onAuthSuccess }) {
             </h1>
             <p>
               {mode === 'register'
-                ? 'Bind your device ID and PS cookie to gain access.'
-                : 'Sign in with your registered device credentials.'}
+                ? 'Create your account by entering new userid and password'
+                : 'Sign in with your registered credentials.'}
             </p>
           </div>
 
@@ -81,12 +81,12 @@ function AuthPage({ onAuthSuccess }) {
 
           <form className="auth-form" onSubmit={submitForm}>
             <label>
-              <span>User Name</span>
+              <span>UserID</span>
               <input
                 name="device_id"
                 value={form.device_id}
                 onChange={onChange}
-                placeholder="e.g. d3v1c3-a1b2c3"
+                placeholder="Enter your userID"
                 autoComplete="off"
                 spellCheck={false}
                 required
@@ -99,7 +99,7 @@ function AuthPage({ onAuthSuccess }) {
                 name="ps_cookie"
                 value={form.ps_cookie}
                 onChange={onChange}
-                placeholder="Paste your ps_cookie value"
+                placeholder="Enter the password"
                 autoComplete="off"
                 spellCheck={false}
                 required
