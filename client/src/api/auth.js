@@ -54,16 +54,32 @@ async function deleteJson(path, opts = {}) {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-export function registerUser(payload) {
-  return postJson('/auth/register', payload)
-}
-
 export function loginUser(payload) {
   return postJson('/auth/login', payload)
 }
 
 export function logoutUser() {
   return postJson('/auth/logout', {})
+}
+
+export function getCurrentUser() {
+  return getJson('/auth/me')
+}
+
+export function listAdminUsers() {
+  return getJson('/api/admin/users')
+}
+
+export function createAdminUser(payload) {
+  return postJson('/api/admin/users', payload)
+}
+
+export function deleteAdminUser(deviceId) {
+  return deleteJson(`/api/admin/users/${encodeURIComponent(deviceId)}`)
+}
+
+export function registerUser(payload) {
+  return createAdminUser(payload)
 }
 
 // ─── OTP ──────────────────────────────────────────────────────────────────────

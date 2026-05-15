@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-  "time"
+	"time"
 
 	"server/config"
 	"server/handlers"
@@ -56,9 +56,9 @@ func main() {
 	// Auth routes — no session required
 	auth := r.Group("/auth")
 	{
-		auth.POST("/register", h.Register) // one-time: store device_id + ps_cookie
-		auth.POST("/login", h.Login)       // get persistent session token
-		auth.POST("/logout", h.Logout)     // invalidate token
+		auth.POST("/login", h.Login)   // get persistent session token
+		auth.POST("/logout", h.Logout) // invalidate token
+		auth.GET("/me", middleware.RequireSession(db), h.CurrentUser)
 	}
 
 	// Protected routes — require valid session token
@@ -75,6 +75,14 @@ func main() {
 		api.DELETE("/share/revoke", h.RevokeShareToken)
 	}
 
+	admin := api.Group("/admin")
+	admin.Use(middleware.RequireAdmin())
+	{
+		admin.GET("/users", h.ListUsers)
+		admin.POST("/users", h.CreateUser)
+		admin.DELETE("/users/:device_id", h.DeleteUser)
+	}
+
 	share := r.Group("/share")
 	{
 		share.GET("/:token/info", h.ShareTokenInfo) // frontend checks validity
@@ -85,14 +93,14 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
- 	r.GET("/health", func(c *gin.Context) {
+	r.GET("/health", func(c *gin.Context) {
 		// Check DB connection
 		if err := db.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":  "down",
+				"status":   "down",
 				"database": "disconnected",
-				"error":   err.Error(),
-				"time":    time.Now().Format(time.RFC3339),
+				"error":    err.Error(),
+				"time":     time.Now().Format(time.RFC3339),
 			})
 			return
 		}
@@ -103,7 +111,6 @@ func main() {
 			"time":     time.Now().Format(time.RFC3339),
 		})
 	})
-
 
 	log.Printf("Server running on :%s", port)
 	r.Run(":" + port)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { registerUser, loginUser } from '../api/auth.js'
+import { loginUser } from '../api/auth.js'
 
 const initialForm = {
   device_id: '',
@@ -25,16 +25,13 @@ function AuthPage({ onAuthSuccess }) {
     setMessage('')
 
     try {
-      const response =
-        mode === 'register'
-          ? await registerUser(form)
-          : await loginUser(form)
+      const response = await loginUser(form)
 
-      setMessage(response.message || (mode === 'register' ? 'Device registered.' : 'Login successful.'))
+      setMessage(response.message || 'Login successful.')
 
       if (response.token) {
         localStorage.setItem('session_token', response.token)
-        if (mode === 'login' && onAuthSuccess) {
+        if (onAuthSuccess) {
           setTimeout(() => onAuthSuccess(), 500)
         }
       }
@@ -53,11 +50,11 @@ function AuthPage({ onAuthSuccess }) {
           <div className="auth-copy">
             <span className="auth-badge">PCDP</span>
             <h1>
-              {mode === 'register' ? 'Register device' : 'Welcome back'}
+              {mode === 'register' ? 'Account registration' : 'Welcome back'}
             </h1>
             <p>
               {mode === 'register'
-                ? 'Create your account by entering new userid and password'
+                ? 'Registration is handled by the administrator.'
                 : 'Sign in with your registered credentials.'}
             </p>
           </div>
@@ -79,37 +76,48 @@ function AuthPage({ onAuthSuccess }) {
             </button>
           </div>
 
-          <form className="auth-form" onSubmit={submitForm}>
-            <label>
-              <span>UserID</span>
-              <input
-                name="device_id"
-                value={form.device_id}
-                onChange={onChange}
-                placeholder="Enter your userID"
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
-            </label>
+          {mode === 'register' ? (
+            <div className="auth-register-note">
+              <p>
+                Contact <a href="mailto:developer@bitsathy.in">developer@bitsathy.in</a> to register your account.
+              </p>
+              <p>
+                Once your account is created, return here and sign in with your credentials.
+              </p>
+            </div>
+          ) : (
+            <form className="auth-form" onSubmit={submitForm}>
+              <label>
+                <span>UserID</span>
+                <input
+                  name="device_id"
+                  value={form.device_id}
+                  onChange={onChange}
+                  placeholder="Enter your userID"
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+              </label>
 
-            <label>
-              <span>Password</span>
-              <input
-                name="ps_cookie"
-                value={form.ps_cookie}
-                onChange={onChange}
-                placeholder="Enter the password"
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
-            </label>
+              <label>
+                <span>Password</span>
+                <input
+                  name="ps_cookie"
+                  value={form.ps_cookie}
+                  onChange={onChange}
+                  placeholder="Enter the password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+              </label>
 
-            <button type="submit" className="auth-submit" disabled={loading}>
-              {loading ? 'Please wait…' : mode === 'register' ? 'Register device' : 'Sign in'}
-            </button>
-          </form>
+              <button type="submit" className="auth-submit" disabled={loading}>
+                {loading ? 'Please wait…' : 'Sign in'}
+              </button>
+            </form>
+          )}
 
           {message && <p className="auth-message success">{message}</p>}
           {error   && <p className="auth-message error">{error}</p>}

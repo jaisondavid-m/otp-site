@@ -224,6 +224,128 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 }
 
+// ─── Current User ────────────────────────────────────────────────────────────
+// GET /auth/me
+// Returns the session identity so the frontend can decide whether to show admin UI.
+
+func (h *Handler) CurrentUser(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"device_id": c.GetString("device_id"),
+		"is_admin":  c.GetBool("is_admin"),
+	})
+}
+
+// ─── Admin Users ─────────────────────────────────────────────────────────────
+// GET /api/admin/users
+// Admin only. Lists registered users without exposing passwords.
+
+func (h *Handler) ListUsers(c *gin.Context) {
+	rows, err := h.DB.Query(`
+		SELECT device_id, created_at, updated_at
+		FROM users
+		ORDER BY created_at DESC, device_id ASC
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load users"})
+		return
+	}
+	defer rows.Close()
+
+	type userItem struct {
+		DeviceID  string    `json:"device_id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		IsAdmin   bool      `json:"is_admin"`
+	}
+
+	users := make([]userItem, 0)
+	adminDeviceID := strings.TrimSpace(os.Getenv("ADMIN_DEVICE_ID"))
+
+	for rows.Next() {
+		var item userItem
+		if err := rows.Scan(&item.DeviceID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read users"})
+			return
+		}
+		item.IsAdmin = adminDeviceID != "" && item.DeviceID == adminDeviceID
+		users = append(users, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read users"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": users})
+}
+
+// POST /api/admin/users
+// Admin only. Creates a new user account.
+
+func (h *Handler) CreateUser(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id and ps_cookie are required"})
+		return
+	}
+
+	req.DeviceID = strings.TrimSpace(req.DeviceID)
+	req.PSCookie = strings.TrimSpace(req.PSCookie)
+	if req.DeviceID == "" || req.PSCookie == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id and ps_cookie are required"})
+		return
+	}
+
+	res, err := h.DB.Exec(`
+		INSERT INTO users (device_id, ps_cookie)
+		VALUES (?, ?)
+	`, req.DeviceID, req.PSCookie)
+	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	c.JSON(http.StatusCreated, gin.H{
+		"message":    "user created successfully",
+		"rows_affected": rows,
+	})
+}
+
+// DELETE /api/admin/users/:device_id
+// Admin only. Deletes the user and any cascaded sessions.
+
+func (h *Handler) DeleteUser(c *gin.Context) {
+	targetDeviceID := strings.TrimSpace(c.Param("device_id"))
+	if targetDeviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id is required"})
+		return
+	}
+
+	if targetDeviceID == c.GetString("device_id") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "you cannot delete the currently logged-in admin account"})
+		return
+	}
+
+	res, err := h.DB.Exec(`DELETE FROM users WHERE device_id = ?`, targetDeviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "user deleted successfully"})
+}
+
 // ─── OTP Proxy ────────────────────────────────────────────────────────────────
 // POST /api/qr/otp
 // Requires valid session token. Forwards OTP to bitsathy with stored cookies.

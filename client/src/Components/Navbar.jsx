@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
-function Navbar({ onLogout }) {
+function Navbar({ onLogout, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -32,6 +32,7 @@ function Navbar({ onLogout }) {
     { path: '/activity', label: 'Activity' },
     { path: '/profile', label: 'Profile' },
     { path: '/share', label: 'Share' },
+    ...(isAdmin ? [{ path: '/admin/users', label: 'Users' }] : []),
   ];
 
   return (

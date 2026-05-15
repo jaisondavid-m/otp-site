@@ -3,6 +3,7 @@ package middleware
 import (
 	"database/sql"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -43,8 +44,26 @@ func RequireSession(db *sql.DB) gin.HandlerFunc {
 
 		c.Set("device_id", deviceID)
 		c.Set("ps_cookie", psCookie)
+		c.Set("is_admin", isAdminDevice(deviceID))
 		c.Next()
 	}
+}
+
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !c.GetBool("is_admin") {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "admin access required",
+			})
+			return
+		}
+		c.Next()
+	}
+}
+
+func isAdminDevice(deviceID string) bool {
+	adminDeviceID := strings.TrimSpace(os.Getenv("ADMIN_DEVICE_ID"))
+	return adminDeviceID != "" && deviceID == adminDeviceID
 }
 
 func extractToken(c *gin.Context) string {

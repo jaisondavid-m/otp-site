@@ -1,24 +1,33 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import AuthPage from '../Pages/AuthPage.jsx'
 import Home from '../Pages/Home.jsx'
 import OTP from '../Pages/OTP.jsx'
 import Attendance from '../Pages/Attendance.jsx'
 import Navbar from '../Components/Navbar.jsx'
-import { logoutUser } from '../api/auth.js'
 import Activity from '../Pages/Activity.jsx'
 import Profile from '../Pages/Profile.jsx'
 import ShareManage from '../Pages/ShareManage.jsx'
 import ShareOTP from '../Pages/ShareOTP.jsx'
+import AdminUsers from '../Pages/AdminUsers.jsx'
+import { getCurrentUser, logoutUser } from '../api/auth.js'
 
 function PrivateRoute({ children, isAuthenticated }) {
 	return isAuthenticated ? children : <Navigate to="/auth" replace />
 }
 
-function Layout({ children, isAuthenticated, onLogout }) {
+function AdminRoute({ children, isAuthenticated, isAdmin }) {
+	if (!isAuthenticated) {
+		return <Navigate to="/auth" replace />
+	}
+
+	return isAdmin ? children : <Navigate to="/" replace />
+}
+
+function Layout({ children, isAuthenticated, onLogout, isAdmin }) {
 	return (
 		<div className="app-container">
-			{isAuthenticated && <Navbar onLogout={onLogout} />}
+			{isAuthenticated && <Navbar onLogout={onLogout} isAdmin={isAdmin} />}
 			<div className="app-content">
 				{children}
 			</div>
@@ -28,19 +37,49 @@ function Layout({ children, isAuthenticated, onLogout }) {
 
 function App() {
 	const [isAuthenticated, setIsAuthenticated] = useState(false)
+	const [isAdmin, setIsAdmin] = useState(false)
 	const [loading, setLoading] = useState(true)
-	const location = useLocation()
 
 	useEffect(() => {
-		const token = localStorage.getItem('session_token')
-		if (token) {
-			setIsAuthenticated(true)
+		const hydrateSession = async () => {
+			const token = localStorage.getItem('session_token')
+			if (!token) {
+				setIsAuthenticated(false)
+				setIsAdmin(false)
+				setLoading(false)
+				return
+			}
+
+			try {
+				const currentUser = await getCurrentUser()
+				setIsAuthenticated(true)
+				setIsAdmin(Boolean(currentUser.is_admin))
+			} catch (err) {
+				console.error('Session hydration error:', err)
+				localStorage.removeItem('session_token')
+				setIsAuthenticated(false)
+				setIsAdmin(false)
+			} finally {
+				setLoading(false)
+			}
 		}
-		setLoading(false)
+
+		hydrateSession()
 	}, [])
 
 	const handleAuthSuccess = () => {
-		setIsAuthenticated(true)
+		setLoading(true)
+		getCurrentUser()
+			.then((currentUser) => {
+				setIsAuthenticated(true)
+				setIsAdmin(Boolean(currentUser.is_admin))
+			})
+			.catch((err) => {
+				console.error('Session hydration error:', err)
+				setIsAuthenticated(true)
+				setIsAdmin(false)
+			})
+			.finally(() => setLoading(false))
 	}
 
 	const handleLogout = async () => {
@@ -64,7 +103,7 @@ function App() {
 	}
 
 	return (
-		<Layout isAuthenticated={isAuthenticated} onLogout={handleLogout}>
+		<Layout isAuthenticated={isAuthenticated} onLogout={handleLogout} isAdmin={isAdmin}>
 			<Routes>
 				<Route
 					path="/auth"
@@ -113,6 +152,14 @@ function App() {
 							<ShareManage />
 						</PrivateRoute>
 					} />
+				<Route
+					path="/admin/users"
+					element={
+						<AdminRoute isAuthenticated={isAuthenticated} isAdmin={isAdmin}>
+							<AdminUsers />
+						</AdminRoute>
+					}
+				/>
 					
 				<Route path="/share/:token" element={<ShareOTP />} />
 
