@@ -57,8 +57,8 @@ function AuthPage({ onAuthSuccess }) {
             </h1>
             <p>
               {mode === 'register'
-                ? 'Bind your device ID and PS cookie to gain access.'
-                : 'Sign in with your registered device credentials.'}
+                ? 'Create your account by entering new userid and password'
+                : 'Sign in with your registered credentials.'}
             </p>
           </div>
 
