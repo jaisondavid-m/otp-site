@@ -81,12 +81,12 @@ function AuthPage({ onAuthSuccess }) {
 
           <form className="auth-form" onSubmit={submitForm}>
             <label>
-              <span>Device ID</span>
+              <span>UserID</span>
               <input
                 name="device_id"
                 value={form.device_id}
                 onChange={onChange}
-                placeholder="e.g. d3v1c3-a1b2c3"
+                placeholder="Enter your userID"
                 autoComplete="off"
                 spellCheck={false}
                 required
@@ -94,12 +94,12 @@ function AuthPage({ onAuthSuccess }) {
             </label>
 
             <label>
-              <span>PS Cookie</span>
+              <span>Password</span>
               <input
                 name="ps_cookie"
                 value={form.ps_cookie}
                 onChange={onChange}
-                placeholder="Paste your ps_cookie value"
+                placeholder="Enter the password"
                 autoComplete="off"
                 spellCheck={false}
                 required
