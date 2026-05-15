@@ -78,7 +78,7 @@ function ShareManage() {
                             className="share-code-input"
                             value={shareCode}
                             onChange={(e) => setShareCode(e.target.value)}
-                            placeholder="e.g. batch-7"
+                            placeholder="e.g. my-custom-code"
                             autoComplete="off"
                             spellCheck="false"
                         />

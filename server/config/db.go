@@ -12,24 +12,66 @@ import (
 )
 
 func Init() (*sql.DB, error) {
-	tlsName, err := registerTiDBTLSConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&tls=%s",
+	primary, err := openDB(
 		getEnv("DB_USER", "root"),
 		getEnv("DB_PASS", "password"),
 		getEnv("DB_HOST", "localhost"),
 		getEnv("DB_PORT", "3306"),
 		getEnv("DB_NAME", "ps_app"),
-		tlsName,
+		getEnv("DB_TLS_CA_FILE", filepath.Join("certs", "tidb-ca.pem")),
 	)
-	return sql.Open("mysql", dsn)
+	if err == nil {
+		return primary, nil
+	}
+
+	if getEnv("DB_HOST", "localhost") == "localhost" && getEnv("DB_PORT", "3306") == "3306" {
+		return nil, err
+	}
+
+	fallback, fallbackErr := openDB(
+		getEnv("DB_USER", "root"),
+		getEnv("DB_PASS", "password"),
+		"localhost",
+		"3306",
+		getEnv("DB_NAME", "ps_app"),
+		"",
+	)
+	if fallbackErr == nil {
+		return fallback, nil
+	}
+
+	return nil, fmt.Errorf("primary db connection failed: %w; fallback db connection failed: %v", err, fallbackErr)
 }
 
-func registerTiDBTLSConfig() (string, error) {
-	caPath := getEnv("DB_TLS_CA_FILE", filepath.Join("certs", "tidb-ca.pem"))
+func openDB(user, pass, host, port, name, caPath string) (*sql.DB, error) {
+	tlsName := ""
+	if caPath != "" {
+		registered, err := registerTiDBTLSConfig(caPath)
+		if err != nil {
+			return nil, err
+		}
+		tlsName = registered
+	}
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, pass, host, port, name)
+	if tlsName != "" {
+		dsn += "&tls=" + tlsName
+	}
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func registerTiDBTLSConfig(caPath string) (string, error) {
 	caPEM, err := os.ReadFile(caPath)
 	if err != nil {
 		return "", fmt.Errorf("read TiDB CA file %q: %w", caPath, err)
