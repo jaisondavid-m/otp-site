@@ -90,7 +90,7 @@ function Friends() {
 
         <div className="friend-actions">
           <input value={newDeviceId} onChange={(e) => setNewDeviceId(e.target.value)} placeholder="Device ID to add" />
-          <button onClick={handleSend}>Send Request</button>
+          <button className="btn btn-primary" onClick={handleSend}>Send Request</button>
         </div>
 
         {error && <p className="error">{error}</p>}
@@ -103,7 +103,7 @@ function Friends() {
                 {friends.map((f) => (
                   <li key={f.device_id}>
                     <span>{f.device_id}</span>
-                    <button onClick={() => handleRemove(f.device_id)}>Remove</button>
+                    <button className="btn btn-ghost" onClick={() => handleRemove(f.device_id)}>Remove</button>
                   </li>
                 ))}
               </ul>
@@ -117,8 +117,10 @@ function Friends() {
                 {incoming.map((r) => (
                   <li key={r.id}>
                     <span>{r.from_device}</span>
-                    <button onClick={() => handleApprove(r.id)}>Approve</button>
-                    <button onClick={() => handleReject(r.id)}>Reject</button>
+                    <div>
+                      <button className="btn btn-primary" onClick={() => handleApprove(r.id)}>Approve</button>
+                      <button className="btn btn-ghost" onClick={() => handleReject(r.id)}>Reject</button>
+                    </div>
                   </li>
                 ))}
               </ul>

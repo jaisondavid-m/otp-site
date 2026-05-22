@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"server/config"
@@ -31,14 +32,32 @@ func main() {
 
 	r := gin.Default()
 	r.Use(func(c *gin.Context) {
-		origin := os.Getenv("CORS_ORIGIN")
-		if origin == "" {
-			origin = "http://localhost:5173"
+		corsEnv := os.Getenv("CORS_ORIGIN")
+		if corsEnv == "" {
+			corsEnv = "http://localhost:5173"
 		}
 
-		// Set CORS headers for all responses
-		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		// Build allowed origins set from comma-separated env var
+		allowed := map[string]struct{}{}
+		for _, part := range strings.Split(corsEnv, ",") {
+			p := strings.TrimSpace(part)
+			if p != "" {
+				allowed[p] = struct{}{}
+			}
+		}
+
+		// Determine which origin to echo back. If wildcard present, allow all.
+		reqOrigin := c.Request.Header.Get("Origin")
+		if _, ok := allowed["*"]; ok {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
+		} else if reqOrigin != "" {
+			if _, ok := allowed[reqOrigin]; ok {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", reqOrigin)
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Set-Cookie")
 		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length, Set-Cookie")
