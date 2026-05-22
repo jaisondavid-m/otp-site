@@ -113,6 +113,26 @@ func Migrate(db *sql.DB) error {
 			created_at DATETIME     DEFAULT NOW(),
 			FOREIGN KEY (device_id) REFERENCES users(device_id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS friend_requests (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			from_device VARCHAR(255) NOT NULL,
+			to_device VARCHAR(255) NOT NULL,
+			status ENUM('pending','accepted','rejected') NOT NULL DEFAULT 'pending',
+			created_at DATETIME DEFAULT NOW(),
+			updated_at DATETIME DEFAULT NOW() ON UPDATE NOW(),
+			FOREIGN KEY (from_device) REFERENCES users(device_id) ON DELETE CASCADE,
+			FOREIGN KEY (to_device) REFERENCES users(device_id) ON DELETE CASCADE,
+			UNIQUE KEY unique_request (from_device, to_device)
+		)`,
+		`CREATE TABLE IF NOT EXISTS friends (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			device_a VARCHAR(255) NOT NULL,
+			device_b VARCHAR(255) NOT NULL,
+			created_at DATETIME DEFAULT NOW(),
+			FOREIGN KEY (device_a) REFERENCES users(device_id) ON DELETE CASCADE,
+			FOREIGN KEY (device_b) REFERENCES users(device_id) ON DELETE CASCADE,
+			UNIQUE KEY unique_pair (device_a, device_b)
+		)`,
 	}
 	for _, q := range queries {
 		if _, err := db.Exec(q); err != nil {

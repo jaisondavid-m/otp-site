@@ -73,6 +73,14 @@ func main() {
 		api.GET("/profile", h.ProxyProfile)
 		api.POST("/share/create", h.CreateShareToken)
 		api.DELETE("/share/revoke", h.RevokeShareToken)
+
+		// Friends
+		api.POST("/friends/request", h.SendFriendRequest)
+		api.GET("/friends/requests", h.GetFriendRequests)
+		api.POST("/friends/requests/:id/approve", h.ApproveFriendRequest)
+		api.POST("/friends/requests/:id/reject", h.RejectFriendRequest)
+		api.GET("/friends", h.ListFriends)
+		api.DELETE("/friends/:device_id", h.RemoveFriend)
 	}
 
 	admin := api.Group("/admin")

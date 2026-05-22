@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.pcdp.bitsathy.in'
 
 async function getJson(path, opts = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -128,6 +128,32 @@ export function createShareToken(ttlMinutes = 30, customCode = '') {
 
 export function revokeShareToken() {
   return deleteJson('/api/share/revoke')
+}
+
+// ─── Friends ───────────────────────────────────────────────────────────────
+
+export function sendFriendRequest(targetDeviceId) {
+  return postJson('/api/friends/request', { target_device_id: targetDeviceId })
+}
+
+export function getFriendRequests() {
+  return getJson('/api/friends/requests')
+}
+
+export function approveFriendRequest(id) {
+  return postJson(`/api/friends/requests/${encodeURIComponent(id)}/approve`, {})
+}
+
+export function rejectFriendRequest(id) {
+  return postJson(`/api/friends/requests/${encodeURIComponent(id)}/reject`, {})
+}
+
+export function listFriends() {
+  return getJson('/api/friends')
+}
+
+export function removeFriend(deviceId) {
+  return deleteJson(`/api/friends/${encodeURIComponent(deviceId)}`)
 }
 
 // Public — no session cookie needed, no credentials

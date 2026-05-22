@@ -10,6 +10,7 @@ import Profile from '../Pages/Profile.jsx'
 import ShareManage from '../Pages/ShareManage.jsx'
 import ShareOTP from '../Pages/ShareOTP.jsx'
 import AdminUsers from '../Pages/AdminUsers.jsx'
+import Friends from '../Pages/Friends.jsx'
 import { getCurrentUser, logoutUser } from '../api/auth.js'
 
 function PrivateRoute({ children, isAuthenticated }) {
@@ -147,6 +148,11 @@ function App() {
 						</PrivateRoute>
 					}
 				/>
+				<Route path="/friends" element={
+					<PrivateRoute isAuthenticated={isAuthenticated}>
+						<Friends />
+					</PrivateRoute>
+				} />
 				<Route path="/share" element={
 						<PrivateRoute isAuthenticated={isAuthenticated}>
 							<ShareManage />

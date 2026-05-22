@@ -90,6 +90,18 @@ type OTPRequest struct {
 	OTP string `json:"otp" binding:"required"`
 }
 
+type FriendRequestPayload struct {
+	TargetDeviceID string `json:"target_device_id" binding:"required"`
+}
+
+type FriendRequestItem struct {
+	ID int `json:"id"`
+	From string `json:"from_device"`
+	To string `json:"to_device"`
+	Status string `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func generateToken() (string, error) {
@@ -840,6 +852,268 @@ func (h *Handler) ShareTokenInfo(c *gin.Context) {
 		"device_id":  deviceID,
 		"expires_at": expiresAt.Format(time.RFC3339),
 	})
+}
+
+// ─── Friends: send request, list, approve/reject, list friends, remove
+
+// POST /api/friends/request
+func (h *Handler) SendFriendRequest(c *gin.Context) {
+	var req FriendRequestPayload
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_device_id is required"})
+		return
+	}
+	from := c.GetString("device_id")
+	to := strings.TrimSpace(req.TargetDeviceID)
+	if to == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_device_id is required"})
+		return
+	}
+	if from == to {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot add yourself as friend"})
+		return
+	}
+
+	// Ensure target exists
+	var dummy string
+	if err := h.DB.QueryRow(`SELECT device_id FROM users WHERE device_id = ?`, to).Scan(&dummy); err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "target device not found"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	// If a reciprocal pending request exists, accept it and create friendship
+	var reciprocalID int
+	err := h.DB.QueryRow(`SELECT id FROM friend_requests WHERE from_device = ? AND to_device = ? AND status = 'pending'`, to, from).Scan(&reciprocalID)
+	if err == nil {
+		// Accept reciprocal
+		tx, txErr := h.DB.Begin()
+		if txErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+		_, _ = tx.Exec(`UPDATE friend_requests SET status = 'accepted' WHERE id = ?`, reciprocalID)
+		// insert friendship (ordered)
+		a, b := from, to
+		if a > b { a, b = b, a }
+		_, insErr := tx.Exec(`INSERT IGNORE INTO friends (device_a, device_b) VALUES (?, ?)`, a, b)
+		if insErr != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create friendship"})
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "friend request accepted; you are now friends"})
+		return
+	} else if err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	// Check if already friends
+	a, b := from, to
+	if a > b { a, b = b, a }
+	var fid int
+	err = h.DB.QueryRow(`SELECT id FROM friends WHERE device_a = ? AND device_b = ?`, a, b).Scan(&fid)
+	if err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "already friends"})
+		return
+	}
+	if err != sql.ErrNoRows && err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	// Insert new friend request
+	_, err = h.DB.Exec(`INSERT INTO friend_requests (from_device, to_device) VALUES (?, ?)`, from, to)
+	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			c.JSON(http.StatusConflict, gin.H{"error": "request already sent"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send friend request"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "friend request sent"})
+}
+
+// GET /api/friends/requests
+func (h *Handler) GetFriendRequests(c *gin.Context) {
+	device := c.GetString("device_id")
+
+	incoming := []FriendRequestItem{}
+	outgoing := []FriendRequestItem{}
+
+	rows, err := h.DB.Query(`SELECT id, from_device, to_device, status, created_at FROM friend_requests WHERE to_device = ? ORDER BY created_at DESC`, device)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it FriendRequestItem
+			if err := rows.Scan(&it.ID, &it.From, &it.To, &it.Status, &it.CreatedAt); err == nil {
+				incoming = append(incoming, it)
+			}
+		}
+	}
+
+	rows2, err2 := h.DB.Query(`SELECT id, from_device, to_device, status, created_at FROM friend_requests WHERE from_device = ? ORDER BY created_at DESC`, device)
+	if err2 == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var it FriendRequestItem
+			if err := rows2.Scan(&it.ID, &it.From, &it.To, &it.Status, &it.CreatedAt); err == nil {
+				outgoing = append(outgoing, it)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"incoming": incoming, "outgoing": outgoing})
+}
+
+// POST /api/friends/requests/:id/approve
+func (h *Handler) ApproveFriendRequest(c *gin.Context) {
+	idParam := strings.TrimSpace(c.Param("id"))
+	if idParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request id is required"})
+		return
+	}
+	var reqFrom, reqTo, status string
+	err := h.DB.QueryRow(`SELECT from_device, to_device, status FROM friend_requests WHERE id = ?`, idParam).Scan(&reqFrom, &reqTo, &status)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "friend request not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	me := c.GetString("device_id")
+	if reqTo != me {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to approve this request"})
+		return
+	}
+	if status != "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request is not pending"})
+		return
+	}
+
+	tx, txErr := h.DB.Begin()
+	if txErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	if _, err := tx.Exec(`UPDATE friend_requests SET status = 'accepted' WHERE id = ?`, idParam); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update request"})
+		return
+	}
+
+	a, b := reqFrom, reqTo
+	if a > b { a, b = b, a }
+	if _, err := tx.Exec(`INSERT IGNORE INTO friends (device_a, device_b) VALUES (?, ?)`, a, b); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create friendship"})
+		return
+	}
+
+	// mark any reciprocal pending request as accepted
+	_, _ = tx.Exec(`UPDATE friend_requests SET status = 'accepted' WHERE from_device = ? AND to_device = ? AND status = 'pending'`, reqTo, reqFrom)
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "friend request approved"})
+}
+
+// POST /api/friends/requests/:id/reject
+func (h *Handler) RejectFriendRequest(c *gin.Context) {
+	idParam := strings.TrimSpace(c.Param("id"))
+	if idParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request id is required"})
+		return
+	}
+	var reqTo, status string
+	err := h.DB.QueryRow(`SELECT to_device, status FROM friend_requests WHERE id = ?`, idParam).Scan(&reqTo, &status)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "friend request not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	me := c.GetString("device_id")
+	if reqTo != me {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to reject this request"})
+		return
+	}
+	if status != "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request is not pending"})
+		return
+	}
+
+	if _, err := h.DB.Exec(`UPDATE friend_requests SET status = 'rejected' WHERE id = ?`, idParam); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update request"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "friend request rejected"})
+}
+
+// GET /api/friends
+func (h *Handler) ListFriends(c *gin.Context) {
+	me := c.GetString("device_id")
+	rows, err := h.DB.Query(`SELECT device_a, device_b, created_at FROM friends WHERE device_a = ? OR device_b = ? ORDER BY created_at DESC`, me, me)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list friends"})
+		return
+	}
+	defer rows.Close()
+
+	friends := []map[string]interface{}{}
+	for rows.Next() {
+		var a, b string
+		var created time.Time
+		if err := rows.Scan(&a, &b, &created); err != nil {
+			continue
+		}
+		other := a
+		if other == me { other = b }
+		friends = append(friends, map[string]interface{}{"device_id": other, "created_at": created})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"friends": friends})
+}
+
+// DELETE /api/friends/:device_id
+func (h *Handler) RemoveFriend(c *gin.Context) {
+	me := c.GetString("device_id")
+	target := strings.TrimSpace(c.Param("device_id"))
+	if target == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id is required"})
+		return
+	}
+	a, b := me, target
+	if a > b { a, b = b, a }
+	res, err := h.DB.Exec(`DELETE FROM friends WHERE device_a = ? AND device_b = ?`, a, b)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove friend"})
+		return
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "friend relationship not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "friend removed"})
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
