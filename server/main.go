@@ -113,6 +113,7 @@ func main() {
 	{
 		admin.GET("/users", h.ListUsers)
 		admin.POST("/users", h.CreateUser)
+		admin.POST("/users/:device_id/password", h.UpdateUserPassword)
 		admin.PATCH("/users/:device_id/password", h.UpdateUserPassword)
 		admin.DELETE("/users/:device_id", h.DeleteUser)
 	}

@@ -99,10 +99,10 @@ type FriendRequestPayload struct {
 }
 
 type FriendRequestItem struct {
-	ID int `json:"id"`
-	From string `json:"from_device"`
-	To string `json:"to_device"`
-	Status string `json:"status"`
+	ID        int       `json:"id"`
+	From      string    `json:"from_device"`
+	To        string    `json:"to_device"`
+	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -327,7 +327,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 
 	rows, _ := res.RowsAffected()
 	c.JSON(http.StatusCreated, gin.H{
-		"message":    "user created successfully",
+		"message":       "user created successfully",
 		"rows_affected": rows,
 	})
 }
@@ -942,7 +942,9 @@ func (h *Handler) SendFriendRequest(c *gin.Context) {
 		_, _ = tx.Exec(`UPDATE friend_requests SET status = 'accepted' WHERE id = ?`, reciprocalID)
 		// insert friendship (ordered)
 		a, b := from, to
-		if a > b { a, b = b, a }
+		if a > b {
+			a, b = b, a
+		}
 		_, insErr := tx.Exec(`INSERT IGNORE INTO friends (device_a, device_b) VALUES (?, ?)`, a, b)
 		if insErr != nil {
 			tx.Rollback()
@@ -962,7 +964,9 @@ func (h *Handler) SendFriendRequest(c *gin.Context) {
 
 	// Check if already friends
 	a, b := from, to
-	if a > b { a, b = b, a }
+	if a > b {
+		a, b = b, a
+	}
 	var fid int
 	err = h.DB.QueryRow(`SELECT id FROM friends WHERE device_a = ? AND device_b = ?`, a, b).Scan(&fid)
 	if err == nil {
@@ -1060,7 +1064,9 @@ func (h *Handler) ApproveFriendRequest(c *gin.Context) {
 	}
 
 	a, b := reqFrom, reqTo
-	if a > b { a, b = b, a }
+	if a > b {
+		a, b = b, a
+	}
 	if _, err := tx.Exec(`INSERT IGNORE INTO friends (device_a, device_b) VALUES (?, ?)`, a, b); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create friendship"})
@@ -1131,7 +1137,9 @@ func (h *Handler) ListFriends(c *gin.Context) {
 			continue
 		}
 		other := a
-		if other == me { other = b }
+		if other == me {
+			other = b
+		}
 		friends = append(friends, map[string]interface{}{"device_id": other, "created_at": created})
 	}
 
@@ -1147,7 +1155,9 @@ func (h *Handler) RemoveFriend(c *gin.Context) {
 		return
 	}
 	a, b := me, target
-	if a > b { a, b = b, a }
+	if a > b {
+		a, b = b, a
+	}
 	res, err := h.DB.Exec(`DELETE FROM friends WHERE device_a = ? AND device_b = ?`, a, b)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove friend"})

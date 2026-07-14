@@ -76,7 +76,7 @@ export function createAdminUser(payload) {
 
 export function updateAdminUserPassword(deviceId, payload) {
   return fetch(`${API_BASE_URL}/api/admin/users/${encodeURIComponent(deviceId)}/password`, {
-    method: 'PATCH',
+    method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
