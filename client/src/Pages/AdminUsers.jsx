@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createAdminUser, deleteAdminUser, listAdminUsers } from '../api/auth.js'
+import { createAdminUser, deleteAdminUser, listAdminUsers, updateAdminUserPassword } from '../api/auth.js'
 
 const initialForm = {
   device_id: '',
@@ -9,8 +9,10 @@ const initialForm = {
 function AdminUsers() {
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(initialForm)
+  const [passwordForms, setPasswordForms] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [updatingDeviceId, setUpdatingDeviceId] = useState('')
   const [deletingDeviceId, setDeletingDeviceId] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -37,6 +39,13 @@ function AdminUsers() {
     setForm((current) => ({ ...current, [name]: value }))
   }
 
+  const onPasswordChange = (deviceId, value) => {
+    setPasswordForms((current) => ({
+      ...current,
+      [deviceId]: value,
+    }))
+  }
+
   const handleCreate = async (event) => {
     event.preventDefault()
     setSaving(true)
@@ -52,6 +61,32 @@ function AdminUsers() {
       setError(err.message || 'Failed to create user')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePasswordUpdate = async (deviceId) => {
+    const nextPassword = (passwordForms[deviceId] || '').trim()
+    if (!nextPassword) {
+      setError('Password is required')
+      return
+    }
+
+    setUpdatingDeviceId(deviceId)
+    setError('')
+    setMessage('')
+
+    try {
+      await updateAdminUserPassword(deviceId, { ps_cookie: nextPassword })
+      setPasswordForms((current) => ({
+        ...current,
+        [deviceId]: '',
+      }))
+      setMessage('Password updated successfully.')
+      await loadUsers()
+    } catch (err) {
+      setError(err.message || 'Failed to update password')
+    } finally {
+      setUpdatingDeviceId('')
     }
   }
 
@@ -158,6 +193,31 @@ function AdminUsers() {
                           <div className="admin-user-id">{user.device_id}</div>
                           <div className="admin-user-meta">Created {createdAt}</div>
                           <div className="admin-user-meta">Updated {updatedAt}</div>
+                          <form
+                            className="admin-user-password-form"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              handlePasswordUpdate(user.device_id)
+                            }}
+                          >
+                            <input
+                              className="admin-user-password-input"
+                              type="password"
+                              value={passwordForms[user.device_id] || ''}
+                              onChange={(event) => onPasswordChange(user.device_id, event.target.value)}
+                              placeholder="New password"
+                              autoComplete="off"
+                              spellCheck={false}
+                              required
+                            />
+                            <button
+                              type="submit"
+                              className="admin-password-btn"
+                              disabled={updatingDeviceId === user.device_id}
+                            >
+                              {updatingDeviceId === user.device_id ? 'Saving…' : 'Update password'}
+                            </button>
+                          </form>
                         </main>
 
                         <div className="admin-user-actions">

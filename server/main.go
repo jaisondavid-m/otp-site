@@ -72,6 +72,12 @@ func main() {
 	})
 	h := handlers.New(db)
 
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+		})
+	})
+
 	// Auth routes — no session required
 	auth := r.Group("/auth")
 	{
@@ -107,6 +113,7 @@ func main() {
 	{
 		admin.GET("/users", h.ListUsers)
 		admin.POST("/users", h.CreateUser)
+		admin.PATCH("/users/:device_id/password", h.UpdateUserPassword)
 		admin.DELETE("/users/:device_id", h.DeleteUser)
 	}
 

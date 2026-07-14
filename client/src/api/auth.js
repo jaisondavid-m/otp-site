@@ -74,6 +74,23 @@ export function createAdminUser(payload) {
   return postJson('/api/admin/users', payload)
 }
 
+export function updateAdminUserPassword(deviceId, payload) {
+  return fetch(`${API_BASE_URL}/api/admin/users/${encodeURIComponent(deviceId)}/password`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(async (response) => {
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Request failed')
+    }
+
+    return data
+  })
+}
+
 export function deleteAdminUser(deviceId) {
   return deleteJson(`/api/admin/users/${encodeURIComponent(deviceId)}`)
 }

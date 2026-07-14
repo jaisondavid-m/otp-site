@@ -81,6 +81,10 @@ type RegisterRequest struct {
 	PSCookie string `json:"ps_cookie" binding:"required"`
 }
 
+type UpdatePasswordRequest struct {
+	PSCookie string `json:"ps_cookie" binding:"required"`
+}
+
 type LoginRequest struct {
 	DeviceID string `json:"device_id" binding:"required"`
 	PSCookie string `json:"ps_cookie" binding:"required"`
@@ -326,6 +330,47 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		"message":    "user created successfully",
 		"rows_affected": rows,
 	})
+}
+
+// PATCH /api/admin/users/:device_id/password
+// Admin only. Updates the user's password / ps_cookie.
+
+func (h *Handler) UpdateUserPassword(c *gin.Context) {
+	targetDeviceID := strings.TrimSpace(c.Param("device_id"))
+	if targetDeviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id is required"})
+		return
+	}
+
+	var req UpdatePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ps_cookie is required"})
+		return
+	}
+
+	req.PSCookie = strings.TrimSpace(req.PSCookie)
+	if req.PSCookie == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ps_cookie is required"})
+		return
+	}
+
+	res, err := h.DB.Exec(`
+		UPDATE users
+		SET ps_cookie = ?, updated_at = NOW()
+		WHERE device_id = ?
+	`, req.PSCookie, targetDeviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "password updated successfully"})
 }
 
 // DELETE /api/admin/users/:device_id
