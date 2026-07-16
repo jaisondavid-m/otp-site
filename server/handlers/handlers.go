@@ -1174,15 +1174,14 @@ func (h *Handler) RemoveFriend(c *gin.Context) {
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 func setSessionCookie(c *gin.Context, token string) {
-	// 30-day persistent cookie
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     "session_token",
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int((30 * 24 * time.Hour).Seconds()),
+		MaxAge:   30 * 24 * 60 * 60,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
 	})
 }
 
@@ -1194,8 +1193,8 @@ func clearSessionCookie(c *gin.Context) {
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
 	})
 }
 
