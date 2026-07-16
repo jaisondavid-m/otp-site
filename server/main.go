@@ -72,12 +72,6 @@ func main() {
 	})
 	h := handlers.New(db)
 
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
-	})
-
 	// Auth routes — no session required
 	auth := r.Group("/auth")
 	{
