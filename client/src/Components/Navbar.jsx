@@ -31,6 +31,7 @@ function Navbar({ onLogout, isAdmin }) {
     { path: '/attendance', label: 'Attendance' },
     { path: '/activity', label: 'Activity' },
     { path: '/profile', label: 'Profile' },
+    { path: '/biometric', label: 'Biometrics' },
     { path: '/friends', label: 'Friends' },
     { path: '/share', label: 'Share' },
     ...(isAdmin ? [{ path: '/admin/users', label: 'Users' }] : []),

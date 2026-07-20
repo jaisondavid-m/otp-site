@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { getProfile } from '../api/auth.js'
 
 function QRCode({ value }) {
@@ -195,6 +196,30 @@ function Profile() {
 						<div className="profile-card full-width">
 							<h3 className="card-label">ROLE</h3>
 							<p className="card-value">{profile.role}</p>
+						</div>
+
+						{/* Biometric logs quick summary */}
+						<div className="profile-card full-width biometric-summary-card">
+							<div className="biometric-summary-header">
+								<h3 className="card-label">BIOMETRIC LOGS</h3>
+								<Link to="/biometric" className="biometric-link-anchor">
+									View All Logs &rarr;
+								</Link>
+							</div>
+							<div className="biometric-summary-body">
+								{profile.biometric && profile.biometric.length > 0 ? (
+									<div className="biometric-quick-list">
+										{profile.biometric.slice(0, 3).map((log, index) => (
+											<div key={index} className="biometric-quick-item">
+												<span className="biometric-quick-device">{log.device_name}</span>
+												<span className="biometric-quick-datetime">{log.date} at {log.time}</span>
+											</div>
+										))}
+									</div>
+								) : (
+									<p className="card-value">No biometric records found</p>
+								)}
+							</div>
 						</div>
 
 						{/* QR Code — replaces plain QR value text */}

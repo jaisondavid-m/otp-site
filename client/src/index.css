@@ -2396,3 +2396,389 @@ body {
   color: var(--accent);
   margin-top: 1px;
 }
+
+/* ============================================================
+   Biometrics Page & Quick Summary
+   ============================================================ */
+.biometric-shell {
+  min-height: calc(100vh - 56px);
+  background: var(--bg);
+  padding: 32px 24px 60px;
+}
+.biometric-page-card {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.biometric-page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.biometric-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.biometric-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.biometric-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.biometric-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.biometric-back-btn {
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font-ui);
+}
+.biometric-back-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Stats Grid */
+.biometric-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+.biometric-stat-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+.biometric-stat-card:hover {
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-md);
+}
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin: 0;
+}
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+.stat-value.text-accent {
+  color: var(--accent);
+}
+.stat-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Filters Controls */
+.biometric-controls-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+.biometric-filters {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 200px;
+}
+.filter-group label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.biometric-input,
+.biometric-select {
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  width: 100%;
+}
+.biometric-input:focus,
+.biometric-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  background: var(--bg-card);
+}
+.biometric-sort-btn {
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+  min-height: 43px;
+}
+.biometric-sort-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Log Panel */
+.biometric-log-panel {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+.biometric-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1.5px solid var(--border);
+  padding-bottom: 12px;
+}
+.biometric-log-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.biometric-log-header span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.biometric-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.biometric-log-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+.biometric-log-item:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.biometric-log-device {
+  flex: 1.5;
+  min-width: 0;
+}
+.biometric-device-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--border-accent);
+  padding: 4px 12px;
+  border-radius: 999px;
+  word-break: break-all;
+}
+.biometric-log-datetime {
+  flex: 2;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+.biometric-date {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.biometric-time {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.biometric-log-timeofday {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+.time-of-day-pill {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* Empty State / Reset */
+.biometric-empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.biometric-reset-btn {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.biometric-reset-btn:hover {
+  opacity: 0.9;
+}
+
+/* Quick Summary styles inside Profile page */
+.biometric-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.biometric-link-anchor {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.biometric-link-anchor:hover {
+  color: var(--text-primary);
+}
+.biometric-quick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.biometric-quick-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.biometric-quick-device {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+.biometric-quick-datetime {
+  color: var(--text-secondary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .biometric-stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .biometric-stat-card.full-on-mobile {
+    grid-column: span 2;
+  }
+  .biometric-log-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .biometric-log-datetime {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+    gap: 12px;
+  }
+  .biometric-log-timeofday {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .biometric-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .biometric-stat-card.full-on-mobile {
+    grid-column: span 1;
+  }
+  .biometric-filters {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .filter-group {
+    min-width: 100%;
+  }
+  .biometric-shell {
+    padding: 16px 16px 40px;
+  }
+  .biometric-log-datetime {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

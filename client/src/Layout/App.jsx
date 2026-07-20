@@ -11,6 +11,7 @@ import ShareManage from '../Pages/ShareManage.jsx'
 import ShareOTP from '../Pages/ShareOTP.jsx'
 import AdminUsers from '../Pages/AdminUsers.jsx'
 import Friends from '../Pages/Friends.jsx'
+import Biometric from '../Pages/Biometric.jsx'
 import { getCurrentUser, logoutUser } from '../api/auth.js'
 
 function PrivateRoute({ children, isAuthenticated }) {
@@ -145,6 +146,14 @@ function App() {
 					element={
 						<PrivateRoute isAuthenticated={isAuthenticated}>
 							<Profile />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="/biometric"
+					element={
+						<PrivateRoute isAuthenticated={isAuthenticated}>
+							<Biometric />
 						</PrivateRoute>
 					}
 				/>
