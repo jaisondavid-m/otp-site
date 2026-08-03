@@ -1,11 +1,21 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.pcdp.bitsathy.in'
 
+function getAuthHeaders(customHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...customHeaders }
+  const token = localStorage.getItem('session_token')
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
 async function getJson(path, opts = {}) {
+  const { headers, ...restOpts } = opts
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'GET',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
+    headers: getAuthHeaders(headers),
+    ...restOpts,
   })
 
   const data = await response.json().catch(() => ({}))
@@ -18,12 +28,13 @@ async function getJson(path, opts = {}) {
 }
 
 async function postJson(path, body, opts = {}) {
+  const { headers, ...restOpts } = opts
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(headers),
     body: JSON.stringify(body),
-    ...opts,
+    ...restOpts,
   })
 
   const data = await response.json().catch(() => ({}))
@@ -36,11 +47,12 @@ async function postJson(path, body, opts = {}) {
 }
 
 async function deleteJson(path, opts = {}) {
+  const { headers, ...restOpts } = opts
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'DELETE',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
+    headers: getAuthHeaders(headers),
+    ...restOpts,
   })
 
   const data = await response.json().catch(() => ({}))
@@ -75,20 +87,7 @@ export function createAdminUser(payload) {
 }
 
 export function updateAdminUserPassword(deviceId, payload) {
-  return fetch(`${API_BASE_URL}/api/admin/users/${encodeURIComponent(deviceId)}/password`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(async (response) => {
-    const data = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Request failed')
-    }
-
-    return data
-  })
+  return postJson(`/api/admin/users/${encodeURIComponent(deviceId)}/password`, payload)
 }
 
 export function deleteAdminUser(deviceId) {
