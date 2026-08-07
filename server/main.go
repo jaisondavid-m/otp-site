@@ -89,7 +89,14 @@ func main() {
 		api.GET("/pending-action", h.ProxyPendingAction)
 		api.GET("/activity", h.ProxyActivity)
 		api.GET("/activity/details", h.ProxyActivityDetails)
+		api.GET("/activity/survey/questions", h.ProxyGetSurveyQuestions)
+		api.POST("/activity/survey/submit", h.ProxySubmitSurvey)
 		api.GET("/profile", h.ProxyProfile)
+		api.GET("/user/images", h.ProxyUserImage)
+		api.GET("/user-image", h.ProxyUserImage)
+		api.GET("/notifications", h.ProxyNotifications)
+		api.GET("/ps_app_v3/notification", h.ProxyNotifications)
+		api.GET("/share", h.GetShareToken)
 		api.POST("/share/create", h.CreateShareToken)
 		api.DELETE("/share/revoke", h.RevokeShareToken)
 
@@ -100,6 +107,8 @@ func main() {
 		api.POST("/friends/requests/:id/reject", h.RejectFriendRequest)
 		api.GET("/friends", h.ListFriends)
 		api.DELETE("/friends/:device_id", h.RemoveFriend)
+		api.POST("/friends/nickname", h.SetFriendNickname)
+		api.POST("/friends/submit-otp", h.SubmitFriendsOTP)
 	}
 
 	admin := api.Group("/admin")

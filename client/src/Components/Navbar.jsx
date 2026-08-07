@@ -30,6 +30,7 @@ function Navbar({ onLogout, isAdmin }) {
     { path: '/otp', label: 'OTP' },
     { path: '/attendance', label: 'Attendance' },
     { path: '/activity', label: 'Activity' },
+    { path: '/notifications', label: 'Notifications' },
     { path: '/profile', label: 'Profile' },
     { path: '/biometric', label: 'Biometrics' },
     { path: '/friends', label: 'Friends' },

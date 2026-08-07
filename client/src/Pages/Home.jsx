@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { getPendingActions, getActivityDetails } from '../api/auth.js'
+import { getPendingActions, getActivityDetails, formatImageUrl } from '../api/auth.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ function ActivityDetailModal({ id, onClose }) {
 
 						<div className="modal-faculty-row">
 							<img
-								src={detail.user_profile}
+								src={formatImageUrl(detail.user_profile, detail.user_id)}
 								alt={detail.user_name}
 								className="activity-user-avatar"
 								onError={(e) => { e.currentTarget.style.display = 'none' }}

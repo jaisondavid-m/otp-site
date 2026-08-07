@@ -14,6 +14,7 @@ function ShareOTP() {
 
 	const [submitting, setSubmitting] = useState(false)
 	const [message, setMessage] = useState(null)   // { type: 'success'|'error', text }
+	const [batchResults, setBatchResults] = useState(null)
 
 	// Validate the token on mount
 	useEffect(() => {
@@ -84,10 +85,20 @@ function ShareOTP() {
 		}
 		setSubmitting(true)
 		setMessage(null)
+		setBatchResults(null)
 		try {
 			const res = await submitShareOTP(token, otp)
-			// Pass through whatever the upstream says
-			setMessage({ type: 'success', text: res?.message ?? 'OTP submitted successfully!' })
+			if (res && Array.isArray(res.results)) {
+				setBatchResults(res.results)
+				const successCount = res.results.filter((r) => r.success).length
+				setMessage({
+					type: successCount > 0 ? 'success' : 'error',
+					text: `Broadcast OTP processed: ${successCount}/${res.results.length} target(s) succeeded.`,
+				})
+			} else {
+				const textMsg = res?.message || res?.data?.message || (typeof res === 'string' ? res : 'OTP submitted successfully!')
+				setMessage({ type: 'success', text: textMsg })
+			}
 			setDigits(['', '', '', '', '', ''])
 			inputRefs.current[0]?.focus()
 		} catch (err) {
@@ -216,6 +227,62 @@ function ShareOTP() {
 									<div className={`otp-message ${message.type}`}>
 										<span className="msg-icon">{message.type === 'success' ? '✓' : '✕'}</span>
 										{message.text}
+									</div>
+								)}
+
+								{batchResults && (
+									<div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
+										<div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+											Target Response Breakdown ({batchResults.length} Account{batchResults.length === 1 ? '' : 's'}):
+										</div>
+										{batchResults.map((item, i) => {
+											let respMsg = ''
+											if (item.error) {
+												respMsg = item.error
+											} else if (item.data) {
+												if (typeof item.data === 'string') respMsg = item.data
+												else if (item.data.message) respMsg = item.data.message
+												else if (item.data.error) respMsg = item.data.error
+												else respMsg = JSON.stringify(item.data)
+											} else {
+												respMsg = item.success ? 'Success' : 'Failed'
+											}
+
+											return (
+												<div
+													key={i}
+													style={{
+														background: item.success ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+														border: `1.5px solid ${item.success ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+														borderRadius: 'var(--radius-md)',
+														padding: '12px 14px',
+														display: 'flex',
+														flexDirection: 'column',
+														gap: 6
+													}}
+												>
+													<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+														<span style={{ fontWeight: 700, fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+															👤 {item.device_id}
+														</span>
+														<span style={{
+															fontSize: 12,
+															fontWeight: 800,
+															padding: '2px 8px',
+															borderRadius: 4,
+															background: item.success ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+															color: item.success ? '#22c55e' : '#ef4444'
+														}}>
+															{item.success ? '✓ Success' : `✕ Failed (${item.status || 'Err'})`}
+														</span>
+													</div>
+
+													<div style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+														<strong>Response:</strong> {respMsg}
+													</div>
+												</div>
+											)
+										})}
 									</div>
 								)}
 							</div>

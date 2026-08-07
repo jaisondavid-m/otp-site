@@ -107,10 +107,11 @@ func Migrate(db *sql.DB) error {
 			FOREIGN KEY (device_id) REFERENCES users(device_id) ON DELETE CASCADE
 		)`,
 		`CREATE TABLE IF NOT EXISTS share_tokens (
-			token      VARCHAR(64)  PRIMARY KEY,
-			device_id  VARCHAR(255) NOT NULL,
-			expires_at DATETIME     NOT NULL,
-			created_at DATETIME     DEFAULT NOW(),
+			token        VARCHAR(64)  PRIMARY KEY,
+			device_id    VARCHAR(255) NOT NULL,
+			targets_json TEXT         NULL,
+			expires_at   DATETIME     NOT NULL,
+			created_at   DATETIME     DEFAULT NOW(),
 			FOREIGN KEY (device_id) REFERENCES users(device_id) ON DELETE CASCADE
 		)`,
 		`CREATE TABLE IF NOT EXISTS friend_requests (
@@ -133,12 +134,24 @@ func Migrate(db *sql.DB) error {
 			FOREIGN KEY (device_b) REFERENCES users(device_id) ON DELETE CASCADE,
 			UNIQUE KEY unique_pair (device_a, device_b)
 		)`,
+		`CREATE TABLE IF NOT EXISTS friend_nicknames (
+			owner_device VARCHAR(255) NOT NULL,
+			friend_device VARCHAR(255) NOT NULL,
+			nickname VARCHAR(100) NOT NULL,
+			created_at DATETIME DEFAULT NOW(),
+			updated_at DATETIME DEFAULT NOW() ON UPDATE NOW(),
+			PRIMARY KEY (owner_device, friend_device),
+			FOREIGN KEY (owner_device) REFERENCES users(device_id) ON DELETE CASCADE,
+			FOREIGN KEY (friend_device) REFERENCES users(device_id) ON DELETE CASCADE
+		)`,
 	}
 	for _, q := range queries {
 		if _, err := db.Exec(q); err != nil {
 			return err
 		}
 	}
+	// Best-effort column addition for existing databases
+	_, _ = db.Exec(`ALTER TABLE share_tokens ADD COLUMN targets_json TEXT NULL`)
 	return nil
 }
 

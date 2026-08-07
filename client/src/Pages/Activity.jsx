@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { getActivity, getActivityDetails } from '../api/auth.js'
+import { getActivity, getActivityDetails, formatImageUrl } from '../api/auth.js'
 
 function toDateInputValue(date = new Date()) {
 	const offset = date.getTimezoneOffset() * 60 * 1000
@@ -167,7 +167,7 @@ function ActivityDetailModal({ id, onClose }) {
 						{/* Faculty */}
 						<div className="modal-faculty-row">
 							<img
-								src={detail.user_profile}
+								src={formatImageUrl(detail.user_profile, detail.user_id)}
 								alt={detail.user_name}
 								className="activity-user-avatar"
 								onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -272,7 +272,7 @@ function ActivityCard({ item, onSelect }) {
 			<div className="activity-card-footer">
 				<div className="activity-user">
 					<img
-						src={item.user_profile}
+						src={formatImageUrl(item.user_profile, item.user_id)}
 						alt={item.user_name}
 						className="activity-user-avatar"
 						onError={(e) => { e.currentTarget.style.display = 'none' }}

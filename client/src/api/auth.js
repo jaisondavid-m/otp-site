@@ -135,10 +135,16 @@ export function getActivityDetails(id) {
 
 // ─── Share ────────────────────────────────────────────────────────────────────
 
-export function createShareToken(ttlMinutes = 30, customCode = '') {
+export function getMyShareToken() {
+  return getJson('/api/share')
+}
+
+export function createShareToken(ttlMinutes = 30, customCode = '', targetDeviceIds = [], includeSelf = true) {
   return postJson('/api/share/create', {
     ttl_minutes: ttlMinutes,
     custom_code: customCode,
+    target_device_ids: targetDeviceIds,
+    include_self: includeSelf,
   })
 }
 
@@ -172,6 +178,33 @@ export function removeFriend(deviceId) {
   return deleteJson(`/api/friends/${encodeURIComponent(deviceId)}`)
 }
 
+export function setFriendNickname(friendDeviceId, nickname) {
+  return postJson('/api/friends/nickname', {
+    friend_device_id: friendDeviceId,
+    nickname,
+  })
+}
+
+export function submitFriendsOTP(otp, targetDeviceIds = [], includeSelf = true) {
+  return postJson('/api/friends/submit-otp', {
+    otp,
+    target_device_ids: targetDeviceIds,
+    include_self: includeSelf,
+  })
+}
+
+export function getNotifications() {
+  return getJson('/api/notifications')
+}
+
+export function getSurveyQuestions(surveyId) {
+  return getJson(`/api/activity/survey/questions?id=${encodeURIComponent(surveyId)}&limit=true`)
+}
+
+export function submitSurvey(payload) {
+  return postJson('/api/activity/survey/submit', payload)
+}
+
 // Public — no session cookie needed, no credentials
 export async function getShareTokenInfo(token) {
   const response = await fetch(`${API_BASE_URL}/share/${encodeURIComponent(token)}/info`, {
@@ -196,4 +229,39 @@ export async function submitShareOTP(token, otp) {
   }
 
   return data
+}
+
+// ─── User Images ─────────────────────────────────────────────────────────────
+
+export function getUserImageUrl(userId) {
+  if (!userId) return ''
+  const token = localStorage.getItem('session_token') || ''
+  return `${API_BASE_URL}/api/user/images?userId=${encodeURIComponent(userId)}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+}
+
+export function formatImageUrl(url, fallbackUserId = '') {
+  if (!url && !fallbackUserId) return ''
+  const token = localStorage.getItem('session_token') || ''
+
+  if (url && (url.includes('ps.bitsathy.ac.in') || url.includes('/user/images'))) {
+    try {
+      const parsed = new URL(url)
+      const uId = parsed.searchParams.get('userId') || parsed.searchParams.get('user_id') || fallbackUserId
+      if (uId) {
+        return `${API_BASE_URL}/api/user/images?userId=${encodeURIComponent(uId)}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+      }
+    } catch {
+      // relative url
+    }
+  }
+
+  if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:'))) {
+    return url
+  }
+
+  if (fallbackUserId) {
+    return `${API_BASE_URL}/api/user/images?userId=${encodeURIComponent(fallbackUserId)}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+  }
+
+  return url || ''
 }

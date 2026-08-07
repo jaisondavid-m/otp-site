@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -25,36 +26,51 @@ func New(db *sql.DB) *Handler {
 	return &Handler{DB: db}
 }
 
+const (
+	psBaseURLValue                = "https://ps.bitsathy.ac.in/api/ps_app_v3"
+	psQROTPEndpointValue         = "/qr/otp"
+	psAttendanceEndpointValue    = "/my-attendance"
+	psPendingEndpointValue       = "/activity/pending-action"
+	psActivityEndpointValue      = "/activity"
+	psProfileEndpointValue       = "/profile/virtual-id"
+	psActivityDetailsEndpointVal = "/activity/details"
+	psUserImageEndpointValue     = "/user/images"
+)
+
 func buildPSURL(path string) string {
 	return psBaseURL() + path
 }
 
 func psBaseURL() string {
-	return getEnv("BASE_URL", "")
+	return psBaseURLValue
 }
 
 func psQROTPEndpoint() string {
-	return getEnv("QR_OTP_ENDPOINT", "")
+	return psQROTPEndpointValue
 }
 
 func psAttendanceEndpoint() string {
-	return getEnv("ATTENDANCE_ENDPOINT", "")
+	return psAttendanceEndpointValue
 }
 
 func psPendingEndpoint() string {
-	return getEnv("PENDING_ACTION_ENDPOINT", "")
+	return psPendingEndpointValue
 }
 
 func psActivityEndpoint() string {
-	return getEnv("ACTIVITY_ENDPOINT", "")
+	return psActivityEndpointValue
 }
 
 func psProfileEndpoint() string {
-	return getEnv("PROFILE_ENDPOINT", "")
+	return psProfileEndpointValue
+}
+
+func psUserImageEndpoint() string {
+	return psUserImageEndpointValue
 }
 
 func psActivityDetailsEndpoint() string {
-	return getEnv("ACTIVITY_DETAILS_ENDPOINT", "")
+	return psActivityDetailsEndpointVal
 }
 
 func getEnv(key, fallback string) string {
@@ -66,14 +82,22 @@ func getEnv(key, fallback string) string {
 }
 
 func psShareOTPEndpoint() string {
-	return getEnv("QR_OTP_ENDPOINT", "") // reuses same upstream endpoint
+	return psQROTPEndpointValue
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CreateShareRequest struct {
-	TTLMinutes int    `json:"ttl_minutes"`
-	CustomCode string `json:"custom_code"`
+	TTLMinutes    int      `json:"ttl_minutes"`
+	CustomCode    string   `json:"custom_code"`
+	TargetDevices []string `json:"target_device_ids"`
+	IncludeSelf   bool     `json:"include_self"`
+}
+
+type SubmitFriendsOTPRequest struct {
+	OTP           string   `json:"otp" binding:"required"`
+	TargetDevices []string `json:"target_device_ids"`
+	IncludeSelf   bool     `json:"include_self"`
 }
 
 type RegisterRequest struct {
@@ -96,6 +120,11 @@ type OTPRequest struct {
 
 type FriendRequestPayload struct {
 	TargetDeviceID string `json:"target_device_id" binding:"required"`
+}
+
+type FriendNicknamePayload struct {
+	FriendDeviceID string `json:"friend_device_id" binding:"required"`
+	Nickname       string `json:"nickname"`
 }
 
 type FriendRequestItem struct {
@@ -692,9 +721,255 @@ func (h *Handler) ProxyProfile(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
+// ─── User Image Proxy ─────────────────────────────────────────────────────────
+// GET /api/user/images?userId=<userId>
+// Requires valid session token. Fetches user profile/avatar image from bitsathy API.
+
+func (h *Handler) ProxyUserImage(c *gin.Context) {
+	userID := c.Query("userId")
+	if userID == "" {
+		userID = c.Query("user_id")
+	}
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userId query parameter is required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	upstreamURL := fmt.Sprintf("%s?userId=%s", buildPSURL(psUserImageEndpoint()), url.QueryEscape(userID))
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	c.Data(resp.StatusCode, contentType, respBody)
+}
+
+// ─── Notifications Proxy ──────────────────────────────────────────────────────
+// GET /api/notifications
+// GET /api/ps_app_v3/notification
+// Forwards request to https://ps.bitsathy.ac.in/api/ps_app_v3/notification using session cookies.
+
+func (h *Handler) ProxyNotifications(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	upstreamURL := buildPSURL("/notification")
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Survey Proxy ─────────────────────────────────────────────────────────────
+// GET /api/activity/survey/questions?id=382&limit=true
+func (h *Handler) ProxyGetSurveyQuestions(c *gin.Context) {
+	surveyID := c.Query("id")
+	limit := c.DefaultQuery("limit", "true")
+	if surveyID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id parameter is required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	upstreamURL := fmt.Sprintf("%s?id=%s&limit=%s", buildPSURL("/activity/survey/questions"), url.QueryEscape(surveyID), url.QueryEscape(limit))
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// POST /api/activity/survey/submit
+func (h *Handler) ProxySubmitSurvey(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	upstreamURL := buildPSURL("/activity/survey/submit")
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Get Share Token ─────────────────────────────────────────────────────────
+// GET /api/share
+// Requires valid session. Returns active share token for this device if present.
+
+// ─── Get Share Token ─────────────────────────────────────────────────────────
+// GET /api/share
+// Requires valid session. Returns active share token for this device if present.
+
+func (h *Handler) GetShareToken(c *gin.Context) {
+	deviceID := c.GetString("device_id")
+
+	var token string
+	var targetsJSON sql.NullString
+	var expiresAt time.Time
+	err := h.DB.QueryRow(`
+		SELECT token, targets_json, expires_at
+		FROM share_tokens
+		WHERE device_id = ?
+		LIMIT 1
+	`, deviceID).Scan(&token, &targetsJSON, &expiresAt)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusOK, gin.H{
+			"active": false,
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	if time.Now().After(expiresAt) {
+		// Clean up expired token for this device
+		_, _ = h.DB.Exec(`DELETE FROM share_tokens WHERE device_id = ?`, deviceID)
+		c.JSON(http.StatusOK, gin.H{
+			"active": false,
+		})
+		return
+	}
+
+	var targets []string
+	if targetsJSON.Valid && targetsJSON.String != "" {
+		_ = json.Unmarshal([]byte(targetsJSON.String), &targets)
+	}
+	if len(targets) == 0 {
+		targets = []string{deviceID}
+	}
+
+	frontendBase := getEnv("FRONTEND_BASE_URL", "https://pcdp.bitsathy.in")
+	permanent := expiresAt.After(time.Now().AddDate(50, 0, 0))
+
+	c.JSON(http.StatusOK, gin.H{
+		"active":         true,
+		"share_token":    token,
+		"expires_at":     expiresAt.Format(time.RFC3339),
+		"link":           fmt.Sprintf("%s/share/%s", frontendBase, token),
+		"permanent":      permanent,
+		"target_devices": targets,
+	})
+}
+
 // ─── Create Share Token ───────────────────────────────────────────────────────
 // POST /api/share/create
-// Requires valid session. Returns a one-time share token + link.
+// Requires valid session. Returns share token + link. Replaces any previous share link for this user.
 
 func (h *Handler) CreateShareToken(c *gin.Context) {
 	deviceID := c.GetString("device_id")
@@ -725,36 +1000,72 @@ func (h *Handler) CreateShareToken(c *gin.Context) {
 		}
 	}
 
+	// Check if custom code is already taken by another user
 	if customCode != "" {
 		var existingDeviceID string
-		err := h.DB.QueryRow(`SELECT device_id FROM share_tokens WHERE token = ?`, token).Scan(&existingDeviceID)
-		if err == nil && existingDeviceID != deviceID {
-			c.JSON(http.StatusConflict, gin.H{"error": "that custom code is already in use"})
-			return
-		}
-		if err != nil && err != sql.ErrNoRows {
+		var existingExpiresAt time.Time
+		err := h.DB.QueryRow(`SELECT device_id, expires_at FROM share_tokens WHERE token = ?`, customCode).Scan(&existingDeviceID, &existingExpiresAt)
+		if err == nil {
+			if time.Now().Before(existingExpiresAt) {
+				if existingDeviceID != deviceID {
+					c.JSON(http.StatusConflict, gin.H{"error": "that custom code is already taken. Please choose a different code."})
+					return
+				}
+			} else {
+				// Expired token — remove so it can be reused
+				_, _ = h.DB.Exec(`DELETE FROM share_tokens WHERE token = ?`, customCode)
+			}
+		} else if err != sql.ErrNoRows {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 			return
 		}
 	}
 
+	// Build valid target list for group share link
+	validTargetsMap := make(map[string]bool)
+	if req.IncludeSelf || len(req.TargetDevices) == 0 {
+		validTargetsMap[deviceID] = true
+	}
+	for _, t := range req.TargetDevices {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if t == deviceID {
+			validTargetsMap[deviceID] = true
+			continue
+		}
+		a, b := deviceID, t
+		if a > b {
+			a, b = b, a
+		}
+		var count int
+		_ = h.DB.QueryRow(`SELECT COUNT(*) FROM friends WHERE device_a = ? AND device_b = ?`, a, b).Scan(&count)
+		if count > 0 {
+			validTargetsMap[t] = true
+		}
+	}
+
+	validTargets := make([]string, 0, len(validTargetsMap))
+	for t := range validTargetsMap {
+		validTargets = append(validTargets, t)
+	}
+	targetsJSONBytes, _ := json.Marshal(validTargets)
+	targetsJSONStr := string(targetsJSONBytes)
+
+	// Enforce 1 share token per user: clear previous tokens for this device
 	if _, err := h.DB.Exec(`DELETE FROM share_tokens WHERE device_id = ?`, deviceID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to clear previous share token"})
 		return
 	}
 
 	_, err := h.DB.Exec(`
-		INSERT INTO share_tokens (token, device_id, expires_at)
-		VALUES (?, ?, ?)
-	`, token, deviceID, expiresAt)
+		INSERT INTO share_tokens (token, device_id, targets_json, expires_at)
+		VALUES (?, ?, ?, ?)
+	`, token, deviceID, targetsJSONStr, expiresAt)
 	if err != nil {
-		if strings.Contains(err.Error(), "Duplicate entry") {
-			if customCode != "" {
-				c.JSON(http.StatusConflict, gin.H{"error": "that custom code is already in use"})
-				return
-			}
-
-			c.JSON(http.StatusConflict, gin.H{"error": "failed to generate a unique share token, please try again"})
+		if strings.Contains(err.Error(), "Duplicate entry") || strings.Contains(err.Error(), "1062") {
+			c.JSON(http.StatusConflict, gin.H{"error": "that custom code is already taken. Please choose a different code."})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save share token"})
@@ -764,10 +1075,12 @@ func (h *Handler) CreateShareToken(c *gin.Context) {
 	frontendBase := getEnv("FRONTEND_BASE_URL", "https://pcdp.bitsathy.in")
 
 	c.JSON(http.StatusOK, gin.H{
-		"share_token": token,
-		"expires_at":  expiresAt.Format(time.RFC3339),
-		"link":        fmt.Sprintf("%s/share/%s", frontendBase, token),
-		"permanent":   req.TTLMinutes <= 0,
+		"active":         true,
+		"share_token":    token,
+		"expires_at":     expiresAt.Format(time.RFC3339),
+		"link":           fmt.Sprintf("%s/share/%s", frontendBase, token),
+		"permanent":      req.TTLMinutes <= 0,
+		"target_devices": validTargets,
 	})
 }
 
@@ -799,15 +1112,14 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 		return
 	}
 
-	// Validate share token and load owner's credentials
-	var deviceID, psCookie string
+	var deviceID string
+	var targetsJSON sql.NullString
 	var expiresAt time.Time
 	err := h.DB.QueryRow(`
-		SELECT st.device_id, u.ps_cookie, st.expires_at
-		FROM share_tokens st
-		JOIN users u ON u.device_id = st.device_id
-		WHERE st.token = ?
-	`, shareToken).Scan(&deviceID, &psCookie, &expiresAt)
+		SELECT device_id, targets_json, expires_at
+		FROM share_tokens
+		WHERE token = ?
+	`, shareToken).Scan(&deviceID, &targetsJSON, &expiresAt)
 
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invalid or expired share link"})
@@ -818,7 +1130,6 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 		return
 	}
 	if time.Now().After(expiresAt) {
-		// Clean up expired token
 		h.DB.Exec(`DELETE FROM share_tokens WHERE token = ?`, shareToken)
 		c.JSON(http.StatusGone, gin.H{"error": "share link has expired"})
 		return
@@ -830,13 +1141,79 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 		return
 	}
 
-	body, _ := json.Marshal(map[string]string{"otp": req.OTP})
+	var targets []string
+	if targetsJSON.Valid && targetsJSON.String != "" {
+		_ = json.Unmarshal([]byte(targetsJSON.String), &targets)
+	}
+	if len(targets) == 0 {
+		targets = []string{deviceID}
+	}
 
+	type TargetResult struct {
+		DeviceID string      `json:"device_id"`
+		Success  bool        `json:"success"`
+		Status   int         `json:"status"`
+		Data     interface{} `json:"data,omitempty"`
+		Error    string      `json:"error,omitempty"`
+	}
+
+	results := []TargetResult{}
+	for _, targetDev := range targets {
+		var psCookie string
+		err := h.DB.QueryRow(`SELECT ps_cookie FROM users WHERE device_id = ?`, targetDev).Scan(&psCookie)
+		if err != nil {
+			results = append(results, TargetResult{
+				DeviceID: targetDev,
+				Success:  false,
+				Status:   http.StatusNotFound,
+				Error:    "user credentials not found",
+			})
+			continue
+		}
+
+		status, respBody, err := h.executeOTPUpstream(psCookie, targetDev, req.OTP)
+		if err != nil {
+			results = append(results, TargetResult{
+				DeviceID: targetDev,
+				Success:  false,
+				Status:   status,
+				Error:    err.Error(),
+			})
+			continue
+		}
+
+		var parsedData interface{}
+		_ = json.Unmarshal(respBody, &parsedData)
+
+		results = append(results, TargetResult{
+			DeviceID: targetDev,
+			Success:  status == http.StatusOK,
+			Status:   status,
+			Data:     parsedData,
+		})
+	}
+
+	if len(results) == 1 {
+		if results[0].Success {
+			c.JSON(http.StatusOK, results[0].Data)
+		} else {
+			c.JSON(results[0].Status, gin.H{"error": results[0].Error, "details": results[0].Data})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("OTP processed for %d target(s)", len(results)),
+		"results": results,
+	})
+}
+
+func (h *Handler) executeOTPUpstream(psCookie, deviceID, otp string) (int, []byte, error) {
+	body, _ := json.Marshal(map[string]string{"otp": otp})
 	upstreamURL := buildPSURL(psQROTPEndpoint())
 	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
-		return
+		return http.StatusInternalServerError, nil, err
 	}
 
 	upstreamReq.Header.Set("Content-Type", "application/json")
@@ -851,18 +1228,15 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
-		return
+		return http.StatusBadGateway, nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
-		return
+		return http.StatusInternalServerError, nil, err
 	}
-
-	c.Data(resp.StatusCode, "application/json", respBody)
+	return resp.StatusCode, respBody, nil
 }
 
 // ─── Share Token Info (public) ────────────────────────────────────────────────
@@ -1122,7 +1496,16 @@ func (h *Handler) RejectFriendRequest(c *gin.Context) {
 // GET /api/friends
 func (h *Handler) ListFriends(c *gin.Context) {
 	me := c.GetString("device_id")
-	rows, err := h.DB.Query(`SELECT device_a, device_b, created_at FROM friends WHERE device_a = ? OR device_b = ? ORDER BY created_at DESC`, me, me)
+	query := `
+		SELECT f.device_a, f.device_b, f.created_at, fn.nickname
+		FROM friends f
+		LEFT JOIN friend_nicknames fn ON fn.owner_device = ? AND fn.friend_device = (
+			CASE WHEN f.device_a = ? THEN f.device_b ELSE f.device_a END
+		)
+		WHERE f.device_a = ? OR f.device_b = ?
+		ORDER BY f.created_at DESC
+	`
+	rows, err := h.DB.Query(query, me, me, me, me)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list friends"})
 		return
@@ -1133,17 +1516,60 @@ func (h *Handler) ListFriends(c *gin.Context) {
 	for rows.Next() {
 		var a, b string
 		var created time.Time
-		if err := rows.Scan(&a, &b, &created); err != nil {
+		var nickname sql.NullString
+		if err := rows.Scan(&a, &b, &created, &nickname); err != nil {
 			continue
 		}
 		other := a
 		if other == me {
 			other = b
 		}
-		friends = append(friends, map[string]interface{}{"device_id": other, "created_at": created})
+		nick := ""
+		if nickname.Valid {
+			nick = nickname.String
+		}
+		friends = append(friends, map[string]interface{}{
+			"device_id":  other,
+			"nickname":   nick,
+			"created_at": created,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"friends": friends})
+}
+
+// POST /api/friends/nickname
+func (h *Handler) SetFriendNickname(c *gin.Context) {
+	me := c.GetString("device_id")
+	var req FriendNicknamePayload
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "friend_device_id is required"})
+		return
+	}
+	target := strings.TrimSpace(req.FriendDeviceID)
+	nickname := strings.TrimSpace(req.Nickname)
+	if target == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "friend_device_id is required"})
+		return
+	}
+
+	if nickname == "" {
+		_, _ = h.DB.Exec(`DELETE FROM friend_nicknames WHERE owner_device = ? AND friend_device = ?`, me, target)
+		c.JSON(http.StatusOK, gin.H{"message": "nickname removed", "nickname": ""})
+		return
+	}
+
+	_, err := h.DB.Exec(`
+		INSERT INTO friend_nicknames (owner_device, friend_device, nickname)
+		VALUES (?, ?, ?)
+		ON DUPLICATE KEY UPDATE nickname = VALUES(nickname)
+	`, me, target, nickname)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save nickname"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "nickname updated", "nickname": nickname})
 }
 
 // DELETE /api/friends/:device_id
@@ -1168,7 +1594,104 @@ func (h *Handler) RemoveFriend(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "friend relationship not found"})
 		return
 	}
+	// Also clean up private nickname
+	_, _ = h.DB.Exec(`DELETE FROM friend_nicknames WHERE (owner_device = ? AND friend_device = ?) OR (owner_device = ? AND friend_device = ?)`, me, target, target, me)
+
 	c.JSON(http.StatusOK, gin.H{"message": "friend removed"})
+}
+
+// ─── Submit Friends OTP ───────────────────────────────────────────────────────
+// POST /api/friends/submit-otp
+// Requires valid session. Submits OTP for logged in user + selected friends.
+
+func (h *Handler) SubmitFriendsOTP(c *gin.Context) {
+	me := c.GetString("device_id")
+
+	var req SubmitFriendsOTPRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.OTP) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "otp is required"})
+		return
+	}
+
+	targetsMap := make(map[string]bool)
+	if req.IncludeSelf {
+		targetsMap[me] = true
+	}
+
+	for _, t := range req.TargetDevices {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if t == me {
+			targetsMap[me] = true
+			continue
+		}
+		// Verify friendship
+		a, b := me, t
+		if a > b {
+			a, b = b, a
+		}
+		var count int
+		_ = h.DB.QueryRow(`SELECT COUNT(*) FROM friends WHERE device_a = ? AND device_b = ?`, a, b).Scan(&count)
+		if count > 0 {
+			targetsMap[t] = true
+		}
+	}
+
+	if len(targetsMap) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid target devices selected"})
+		return
+	}
+
+	type TargetResult struct {
+		DeviceID string      `json:"device_id"`
+		Success  bool        `json:"success"`
+		Status   int         `json:"status"`
+		Data     interface{} `json:"data,omitempty"`
+		Error    string      `json:"error,omitempty"`
+	}
+
+	results := []TargetResult{}
+	for targetDev := range targetsMap {
+		var psCookie string
+		err := h.DB.QueryRow(`SELECT ps_cookie FROM users WHERE device_id = ?`, targetDev).Scan(&psCookie)
+		if err != nil {
+			results = append(results, TargetResult{
+				DeviceID: targetDev,
+				Success:  false,
+				Status:   http.StatusNotFound,
+				Error:    "user credentials not found",
+			})
+			continue
+		}
+
+		status, respBody, err := h.executeOTPUpstream(psCookie, targetDev, req.OTP)
+		if err != nil {
+			results = append(results, TargetResult{
+				DeviceID: targetDev,
+				Success:  false,
+				Status:   status,
+				Error:    err.Error(),
+			})
+			continue
+		}
+
+		var parsedData interface{}
+		_ = json.Unmarshal(respBody, &parsedData)
+
+		results = append(results, TargetResult{
+			DeviceID: targetDev,
+			Success:  status == http.StatusOK,
+			Status:   status,
+			Data:     parsedData,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("OTP processed for %d target(s)", len(results)),
+		"results": results,
+	})
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import ShareOTP from '../Pages/ShareOTP.jsx'
 import AdminUsers from '../Pages/AdminUsers.jsx'
 import Friends from '../Pages/Friends.jsx'
 import Biometric from '../Pages/Biometric.jsx'
+import Notifications from '../Pages/Notifications.jsx'
 import { getCurrentUser, logoutUser } from '../api/auth.js'
 
 function PrivateRoute({ children, isAuthenticated }) {
@@ -130,6 +131,11 @@ function App() {
 				<Route path="/activity" element={
 					<PrivateRoute isAuthenticated={isAuthenticated}>
 						<Activity />
+					</PrivateRoute>
+				} />
+				<Route path="/notifications" element={
+					<PrivateRoute isAuthenticated={isAuthenticated}>
+						<Notifications />
 					</PrivateRoute>
 				} />
 

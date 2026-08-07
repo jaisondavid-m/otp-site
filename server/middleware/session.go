@@ -71,6 +71,8 @@ func extractToken(c *gin.Context) string {
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
-	token, _ := c.Cookie("session_token")
-	return token
+	if token, err := c.Cookie("session_token"); err == nil && token != "" {
+		return token
+	}
+	return c.Query("token")
 }

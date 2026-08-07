@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { getProfile } from '../api/auth.js'
+import { getProfile, formatImageUrl } from '../api/auth.js'
 
 function QRCode({ value }) {
 	const containerRef = useRef(null)
@@ -152,7 +152,7 @@ function Profile() {
 					{profile.profile_img && (
 						<div className="profile-header-card">
 							<img
-								src={profile.profile_img}
+								src={formatImageUrl(profile.profile_img, profile.user_id)}
 								alt={profile.user_name}
 								className="profile-avatar"
 								onError={(e) => {
