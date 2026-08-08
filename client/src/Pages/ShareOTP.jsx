@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getShareTokenInfo, submitShareOTP } from '../api/auth.js'
 
 function ShareOTP() {
 	const { token } = useParams()
 
-	const [info, setInfo] = useState(null)        // { valid, device_id, expires_at }
+	const [info, setInfo] = useState(null)        // { valid, device_id, expires_at, targets, target_names }
 	const [checking, setChecking] = useState(true)
 	const [invalidReason, setInvalidReason] = useState('')
 
@@ -15,6 +15,21 @@ function ShareOTP() {
 	const [submitting, setSubmitting] = useState(false)
 	const [message, setMessage] = useState(null)   // { type: 'success'|'error', text }
 	const [batchResults, setBatchResults] = useState(null)
+
+	const formattedTargetNames = useMemo(() => {
+		if (!info) return ''
+		const names = (info.target_names || []).filter(Boolean)
+		if (names.length === 0 && info.targets) {
+			names.push(...info.targets.map((t) => t.name || t.device_id).filter(Boolean))
+		}
+		if (names.length === 0) {
+			if (info.name || info.device_id) names.push(info.name || info.device_id)
+		}
+		if (names.length === 0) return ''
+		if (names.length === 1) return names[0]
+		if (names.length === 2) return `${names[0]} and ${names[1]}`
+		return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
+	}, [info])
 
 	// Validate the token on mount
 	useEffect(() => {
@@ -96,12 +111,28 @@ function ShareOTP() {
 					text: `Broadcast OTP processed: ${successCount}/${res.results.length} target(s) succeeded.`,
 				})
 			} else {
+				const item = {
+					device_id: info?.device_id || '',
+					name: info?.name || '',
+					success: true,
+					status: 200,
+					data: res,
+				}
+				setBatchResults([item])
 				const textMsg = res?.message || res?.data?.message || (typeof res === 'string' ? res : 'OTP submitted successfully!')
 				setMessage({ type: 'success', text: textMsg })
 			}
 			setDigits(['', '', '', '', '', ''])
 			inputRefs.current[0]?.focus()
 		} catch (err) {
+			const item = {
+				device_id: info?.device_id || '',
+				name: info?.name || '',
+				success: false,
+				status: err.status || 500,
+				error: err.message || 'Failed to submit OTP.',
+			}
+			setBatchResults([item])
 			setMessage({ type: 'error', text: err.message || 'Failed to submit OTP.' })
 		} finally {
 			setSubmitting(false)
@@ -173,7 +204,7 @@ function ShareOTP() {
 						</div>
 
 						<p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-							. Enter the 6-digit code shown on their screen.
+							Enter the 6-digit code shown on screen to submit for {formattedTargetNames ? <strong style={{ color: 'var(--accent)' }}>{formattedTargetNames}</strong> : 'the target accounts'}.
 						</p>
 
 						<div className="otp-form">
@@ -248,6 +279,8 @@ function ShareOTP() {
 												respMsg = item.success ? 'Success' : 'Failed'
 											}
 
+											const displayName = item.name || item.device_id
+
 											return (
 												<div
 													key={i}
@@ -262,16 +295,24 @@ function ShareOTP() {
 													}}
 												>
 													<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-														<span style={{ fontWeight: 700, fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
-															👤 {item.device_id}
-														</span>
+														<div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+															<span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+																👤 {displayName}
+															</span>
+															{item.name && item.device_id && (
+																<span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+																	ID: {item.device_id}
+																</span>
+															)}
+														</div>
 														<span style={{
 															fontSize: 12,
 															fontWeight: 800,
 															padding: '2px 8px',
 															borderRadius: 4,
 															background: item.success ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
-															color: item.success ? '#22c55e' : '#ef4444'
+															color: item.success ? '#22c55e' : '#ef4444',
+															flexShrink: 0
 														}}>
 															{item.success ? '✓ Success' : `✕ Failed (${item.status || 'Err'})`}
 														</span>

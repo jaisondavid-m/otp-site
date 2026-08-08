@@ -160,7 +160,8 @@ function Friends() {
 
   const handleRemove = async (deviceId) => {
     const friend = friendMap[deviceId]
-    const displayName = friend?.nickname ? `${friend.nickname} (${deviceId})` : deviceId
+    const friendName = friend?.name || friend?.nickname
+    const displayName = friendName ? `${friendName} (${deviceId})` : deviceId
     if (!confirm(`Remove ${displayName} from friends?`)) return
     try {
       await removeFriend(deviceId)
@@ -263,7 +264,7 @@ function Friends() {
 
   // Build readable target names summary
   const selectedTargetNames = useMemo(() => {
-    const names = selectedFriends.map((id) => friendMap[id]?.nickname || id)
+    const names = selectedFriends.map((id) => friendMap[id]?.name || friendMap[id]?.nickname || id)
     if (includeSelf) names.unshift('Myself')
     return names
   }, [selectedFriends, includeSelf, friendMap])
@@ -340,7 +341,7 @@ function Friends() {
           </div>
 
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: -4 }}>
-            Assign private nicknames to your friends for easy identification, select friends to submit OTPs for multiple accounts at once, or create group broadcast share links.
+            Select friends to submit OTPs for multiple accounts at once, or create group broadcast share links.
           </p>
 
           {error && <div className="activity-message error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -550,7 +551,8 @@ function Friends() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
                       {otpResults.map((res, i) => {
                         const targetFriend = friendMap[res.device_id]
-                        const displayName = res.device_id === 'me' ? 'Myself' : (targetFriend?.nickname ? `${targetFriend.nickname} (${res.device_id})` : res.device_id)
+                        const friendLabel = targetFriend?.name || targetFriend?.nickname
+                        const displayName = res.device_id === 'me' ? 'Myself' : (friendLabel ? `${friendLabel} (${res.device_id})` : res.device_id)
                         let respMsg = ''
                         if (res.error) {
                           respMsg = res.error
@@ -710,30 +712,17 @@ function Friends() {
                             />
                             <img
                               src={formatImageUrl('', f.device_id)}
-                              alt={f.nickname || f.device_id}
+                              alt={f.name || f.nickname || f.device_id}
                               style={{ width: 42, height: 42, borderRadius: '50%', background: 'var(--border)', objectFit: 'cover', flexShrink: 0 }}
                               onError={(e) => { e.target.style.display = 'none' }}
                             />
 
                             <div style={{ flex: 1, minWidth: 0 }}>
                               {/* Friend Name / Nickname Display */}
-                              {f.nickname ? (
+                              {(f.name || f.nickname) ? (
                                 <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
-                                      {f.nickname}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      title="Edit private nickname"
-                                      onClick={() => {
-                                        setEditingNicknameId(f.device_id)
-                                        setNicknameInput(f.nickname || '')
-                                      }}
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, fontSize: 12, opacity: 0.7 }}
-                                    >
-                                      ✏️
-                                    </button>
+                                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
+                                    {f.name || f.nickname}
                                   </div>
                                   <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', wordBreak: 'break-all', marginTop: 2 }}>
                                     ID: {f.device_id}
@@ -744,25 +733,6 @@ function Friends() {
                                   <div style={{ fontWeight: 700, fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
                                     {f.device_id}
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingNicknameId(f.device_id)
-                                      setNicknameInput('')
-                                    }}
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      color: 'var(--accent)',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      padding: 0,
-                                      marginTop: 2,
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    + Add Private Nickname
-                                  </button>
                                 </div>
                               )}
 
@@ -849,7 +819,7 @@ function Friends() {
                             <button
                               type="button"
                               onClick={() => {
-                                setQuickTarget({ device_id: f.device_id, nickname: f.nickname })
+                                setQuickTarget({ device_id: f.device_id, nickname: f.name || f.nickname })
                                 setQuickOtp('')
                                 setQuickResult(null)
                               }}
@@ -1074,7 +1044,7 @@ function Friends() {
                 {(groupShareData.target_devices || []).map((devId, idx) => {
                   const targetFriend = friendMap[devId]
                   const isSelf = devId === 'me'
-                  const displayName = isSelf ? 'Myself' : (targetFriend?.nickname || devId)
+                  const displayName = isSelf ? 'Myself' : (targetFriend?.name || targetFriend?.nickname || devId)
 
                   return (
                     <div
@@ -1099,7 +1069,7 @@ function Friends() {
                         <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
                           {displayName} {isSelf && <span style={{ fontSize: 11, background: 'var(--accent-dim)', color: 'var(--accent)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>You</span>}
                         </div>
-                        {!isSelf && targetFriend?.nickname && (
+                        {!isSelf && (targetFriend?.name || targetFriend?.nickname) && (
                           <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                             ID: {devId}
                           </div>

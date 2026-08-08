@@ -92,6 +92,8 @@ func main() {
 		api.GET("/activity/survey/questions", h.ProxyGetSurveyQuestions)
 		api.POST("/activity/survey/submit", h.ProxySubmitSurvey)
 		api.GET("/profile", h.ProxyProfile)
+		api.GET("/points/leaderboard", h.ProxyRewardsLeaderboard)
+		api.GET("/points/opportunities/history", h.ProxyRewardsOpportunitiesHistory)
 		api.GET("/user/images", h.ProxyUserImage)
 		api.GET("/user-image", h.ProxyUserImage)
 		api.GET("/notifications", h.ProxyNotifications)
@@ -118,6 +120,8 @@ func main() {
 		admin.POST("/users", h.CreateUser)
 		admin.POST("/users/:device_id/password", h.UpdateUserPassword)
 		admin.PATCH("/users/:device_id/password", h.UpdateUserPassword)
+		admin.POST("/users/:device_id/name", h.UpdateUserName)
+		admin.PATCH("/users/:device_id/name", h.UpdateUserName)
 		admin.DELETE("/users/:device_id", h.DeleteUser)
 	}
 

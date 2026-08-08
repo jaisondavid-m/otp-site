@@ -90,6 +90,10 @@ export function updateAdminUserPassword(deviceId, payload) {
   return postJson(`/api/admin/users/${encodeURIComponent(deviceId)}/password`, payload)
 }
 
+export function updateAdminUserName(deviceId, payload) {
+  return postJson(`/api/admin/users/${encodeURIComponent(deviceId)}/name`, payload)
+}
+
 export function deleteAdminUser(deviceId) {
   return deleteJson(`/api/admin/users/${encodeURIComponent(deviceId)}`)
 }
@@ -108,6 +112,15 @@ export function submitOTP(otp) {
 
 export function getProfile() {
   return getJson('/api/profile')
+}
+
+export function getRewardsLeaderboard(filter = 'overall', id = '6') {
+  const filterParam = filter && filter !== 'overall' ? `&filter=${encodeURIComponent(filter)}` : ''
+  return getJson(`/api/points/leaderboard?id=${encodeURIComponent(id)}${filterParam}`)
+}
+
+export function getRewardsOpportunitiesHistory(id = '6') {
+  return getJson(`/api/points/opportunities/history?id=${encodeURIComponent(id)}`)
 }
 
 // ─── Attendance ───────────────────────────────────────────────────────────────

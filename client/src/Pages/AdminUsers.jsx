@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { createAdminUser, deleteAdminUser, listAdminUsers, updateAdminUserPassword } from '../api/auth.js'
+import { createAdminUser, deleteAdminUser, listAdminUsers, updateAdminUserPassword, updateAdminUserName } from '../api/auth.js'
 
 const initialForm = {
   device_id: '',
+  name: '',
   ps_cookie: '',
 }
 
@@ -10,9 +11,11 @@ function AdminUsers() {
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(initialForm)
   const [passwordForms, setPasswordForms] = useState({})
+  const [nameForms, setNameForms] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [updatingDeviceId, setUpdatingDeviceId] = useState('')
+  const [updatingNameDeviceId, setUpdatingNameDeviceId] = useState('')
   const [deletingDeviceId, setDeletingDeviceId] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -41,6 +44,13 @@ function AdminUsers() {
 
   const onPasswordChange = (deviceId, value) => {
     setPasswordForms((current) => ({
+      ...current,
+      [deviceId]: value,
+    }))
+  }
+
+  const onNameChange = (deviceId, value) => {
+    setNameForms((current) => ({
       ...current,
       [deviceId]: value,
     }))
@@ -87,6 +97,25 @@ function AdminUsers() {
       setError(err.message || 'Failed to update password')
     } finally {
       setUpdatingDeviceId('')
+    }
+  }
+
+  const handleNameUpdate = async (deviceId) => {
+    const user = users.find((u) => u.device_id === deviceId)
+    const nextName = (nameForms[deviceId] !== undefined ? nameForms[deviceId] : (user?.name || '')).trim()
+
+    setUpdatingNameDeviceId(deviceId)
+    setError('')
+    setMessage('')
+
+    try {
+      await updateAdminUserName(deviceId, { name: nextName })
+      setMessage('User name updated successfully.')
+      await loadUsers()
+    } catch (err) {
+      setError(err.message || 'Failed to update name')
+    } finally {
+      setUpdatingNameDeviceId('')
     }
   }
 
@@ -146,6 +175,18 @@ function AdminUsers() {
                 </label>
 
                 <label>
+                  <span>Name</span>
+                  <input
+                    name="name"
+                    value={form.name}
+                    onChange={onChange}
+                    placeholder="Enter user name"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+
+                <label>
                   <span>Password</span>
                   <input
                     name="ps_cookie"
@@ -190,9 +231,45 @@ function AdminUsers() {
                     return (
                       <article key={user.device_id} className="admin-user-item">
                         <main>
-                          <div className="admin-user-id">{user.device_id}</div>
+                          <div className="admin-user-id" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {user.name ? (
+                              <>
+                                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{user.name}</span>
+                                <span style={{ fontSize: 12, fontWeight: 'normal', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>ID: {user.device_id}</span>
+                              </>
+                            ) : (
+                              <span>{user.device_id}</span>
+                            )}
+                          </div>
                           <div className="admin-user-meta">Created {createdAt}</div>
                           <div className="admin-user-meta">Updated {updatedAt}</div>
+
+                          <form
+                            className="admin-user-password-form"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              handleNameUpdate(user.device_id)
+                            }}
+                            style={{ marginBottom: 6 }}
+                          >
+                            <input
+                              className="admin-user-password-input"
+                              type="text"
+                              value={nameForms[user.device_id] !== undefined ? nameForms[user.device_id] : (user.name || '')}
+                              onChange={(event) => onNameChange(user.device_id, event.target.value)}
+                              placeholder="Name"
+                              autoComplete="off"
+                              spellCheck={false}
+                            />
+                            <button
+                              type="submit"
+                              className="admin-password-btn"
+                              disabled={updatingNameDeviceId === user.device_id}
+                            >
+                              {updatingNameDeviceId === user.device_id ? 'Saving…' : 'Update name'}
+                            </button>
+                          </form>
+
                           <form
                             className="admin-user-password-form"
                             onSubmit={(event) => {

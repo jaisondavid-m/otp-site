@@ -103,6 +103,11 @@ type SubmitFriendsOTPRequest struct {
 type RegisterRequest struct {
 	DeviceID string `json:"device_id" binding:"required"`
 	PSCookie string `json:"ps_cookie" binding:"required"`
+	Name     string `json:"name"`
+}
+
+type UpdateNameRequest struct {
+	Name string `json:"name"`
 }
 
 type UpdatePasswordRequest struct {
@@ -164,13 +169,14 @@ func (h *Handler) Register(c *gin.Context) {
 
 	req.DeviceID = strings.TrimSpace(req.DeviceID)
 	req.PSCookie = strings.TrimSpace(req.PSCookie)
+	req.Name = strings.TrimSpace(req.Name)
 
 	query := `
-		INSERT INTO users (device_id, ps_cookie)
-		VALUES (?, ?)
-		ON DUPLICATE KEY UPDATE ps_cookie = VALUES(ps_cookie), updated_at = NOW()
+		INSERT INTO users (device_id, ps_cookie, name)
+		VALUES (?, ?, ?)
+		ON DUPLICATE KEY UPDATE ps_cookie = VALUES(ps_cookie), name = VALUES(name), updated_at = NOW()
 	`
-	if _, err := h.DB.Exec(query, req.DeviceID, req.PSCookie); err != nil {
+	if _, err := h.DB.Exec(query, req.DeviceID, req.PSCookie, req.Name); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register device"})
 		return
 	}
@@ -274,8 +280,13 @@ func (h *Handler) Logout(c *gin.Context) {
 // Returns the session identity so the frontend can decide whether to show admin UI.
 
 func (h *Handler) CurrentUser(c *gin.Context) {
+	deviceID := c.GetString("device_id")
+	var name string
+	_ = h.DB.QueryRow(`SELECT COALESCE(name, '') FROM users WHERE device_id = ?`, deviceID).Scan(&name)
+
 	c.JSON(http.StatusOK, gin.H{
-		"device_id": c.GetString("device_id"),
+		"device_id": deviceID,
+		"name":      name,
 		"is_admin":  c.GetBool("is_admin"),
 	})
 }
@@ -286,7 +297,7 @@ func (h *Handler) CurrentUser(c *gin.Context) {
 
 func (h *Handler) ListUsers(c *gin.Context) {
 	rows, err := h.DB.Query(`
-		SELECT device_id, created_at, updated_at
+		SELECT device_id, COALESCE(name, ''), created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC, device_id ASC
 	`)
@@ -298,6 +309,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 
 	type userItem struct {
 		DeviceID  string    `json:"device_id"`
+		Name      string    `json:"name"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 		IsAdmin   bool      `json:"is_admin"`
@@ -308,7 +320,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 
 	for rows.Next() {
 		var item userItem
-		if err := rows.Scan(&item.DeviceID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.DeviceID, &item.Name, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read users"})
 			return
 		}
@@ -336,15 +348,16 @@ func (h *Handler) CreateUser(c *gin.Context) {
 
 	req.DeviceID = strings.TrimSpace(req.DeviceID)
 	req.PSCookie = strings.TrimSpace(req.PSCookie)
+	req.Name = strings.TrimSpace(req.Name)
 	if req.DeviceID == "" || req.PSCookie == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id and ps_cookie are required"})
 		return
 	}
 
 	res, err := h.DB.Exec(`
-		INSERT INTO users (device_id, ps_cookie)
-		VALUES (?, ?)
-	`, req.DeviceID, req.PSCookie)
+		INSERT INTO users (device_id, ps_cookie, name)
+		VALUES (?, ?, ?)
+	`, req.DeviceID, req.PSCookie, req.Name)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate entry") {
 			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
@@ -400,6 +413,43 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password updated successfully"})
+}
+
+// PATCH /api/admin/users/:device_id/name
+// Admin only. Updates the user's display name.
+
+func (h *Handler) UpdateUserName(c *gin.Context) {
+	targetDeviceID := strings.TrimSpace(c.Param("device_id"))
+	if targetDeviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id is required"})
+		return
+	}
+
+	var req UpdateNameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+
+	res, err := h.DB.Exec(`
+		UPDATE users
+		SET name = ?, updated_at = NOW()
+		WHERE device_id = ?
+	`, req.Name, targetDeviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update name"})
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "name updated successfully"})
 }
 
 // DELETE /api/admin/users/:device_id
@@ -690,6 +740,97 @@ func (h *Handler) ProxyProfile(c *gin.Context) {
 	deviceID := c.GetString("device_id")
 
 	upstreamURL := buildPSURL(psProfileEndpoint())
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// GET /api/points/leaderboard
+// Requires valid session token. Fetches rewards leaderboard from bitsathy API.
+func (h *Handler) ProxyRewardsLeaderboard(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	filter := strings.TrimSpace(c.Query("filter"))
+	id := strings.TrimSpace(c.Query("id"))
+	if id == "" {
+		id = "6"
+	}
+
+	upstreamURL := fmt.Sprintf("%s/profile/rewards/leaderboard?id=%s", psBaseURL(), id)
+	if filter != "" && filter != "overall" {
+		upstreamURL += "&filter=" + url.QueryEscape(filter)
+	}
+
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// GET /api/points/opportunities/history
+// Requires valid session token. Fetches opportunity points history from bitsathy API.
+func (h *Handler) ProxyRewardsOpportunitiesHistory(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	id := strings.TrimSpace(c.Query("id"))
+	if id == "" {
+		id = "6"
+	}
+
+	upstreamURL := fmt.Sprintf("%s/profile/rewards/opportunities?id=%s", psBaseURL(), id)
 	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
@@ -1151,6 +1292,7 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 
 	type TargetResult struct {
 		DeviceID string      `json:"device_id"`
+		Name     string      `json:"name"`
 		Success  bool        `json:"success"`
 		Status   int         `json:"status"`
 		Data     interface{} `json:"data,omitempty"`
@@ -1159,11 +1301,12 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 
 	results := []TargetResult{}
 	for _, targetDev := range targets {
-		var psCookie string
-		err := h.DB.QueryRow(`SELECT ps_cookie FROM users WHERE device_id = ?`, targetDev).Scan(&psCookie)
+		var psCookie, name string
+		err := h.DB.QueryRow(`SELECT ps_cookie, COALESCE(name, '') FROM users WHERE device_id = ?`, targetDev).Scan(&psCookie, &name)
 		if err != nil {
 			results = append(results, TargetResult{
 				DeviceID: targetDev,
+				Name:     name,
 				Success:  false,
 				Status:   http.StatusNotFound,
 				Error:    "user credentials not found",
@@ -1175,6 +1318,7 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 		if err != nil {
 			results = append(results, TargetResult{
 				DeviceID: targetDev,
+				Name:     name,
 				Success:  false,
 				Status:   status,
 				Error:    err.Error(),
@@ -1187,19 +1331,11 @@ func (h *Handler) ShareProxyOTP(c *gin.Context) {
 
 		results = append(results, TargetResult{
 			DeviceID: targetDev,
+			Name:     name,
 			Success:  status == http.StatusOK,
 			Status:   status,
 			Data:     parsedData,
 		})
-	}
-
-	if len(results) == 1 {
-		if results[0].Success {
-			c.JSON(http.StatusOK, results[0].Data)
-		} else {
-			c.JSON(results[0].Status, gin.H{"error": results[0].Error, "details": results[0].Data})
-		}
-		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1247,10 +1383,11 @@ func (h *Handler) ShareTokenInfo(c *gin.Context) {
 	shareToken := c.Param("token")
 
 	var deviceID string
+	var targetsJSON sql.NullString
 	var expiresAt time.Time
 	err := h.DB.QueryRow(`
-		SELECT device_id, expires_at FROM share_tokens WHERE token = ?
-	`, shareToken).Scan(&deviceID, &expiresAt)
+		SELECT device_id, targets_json, expires_at FROM share_tokens WHERE token = ?
+	`, shareToken).Scan(&deviceID, &targetsJSON, &expiresAt)
 
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"valid": false, "error": "share link not found"})
@@ -1266,10 +1403,46 @@ func (h *Handler) ShareTokenInfo(c *gin.Context) {
 		return
 	}
 
+	var ownerName string
+	_ = h.DB.QueryRow(`SELECT COALESCE(name, '') FROM users WHERE device_id = ?`, deviceID).Scan(&ownerName)
+
+	var targets []string
+	if targetsJSON.Valid && targetsJSON.String != "" {
+		_ = json.Unmarshal([]byte(targetsJSON.String), &targets)
+	}
+	if len(targets) == 0 {
+		targets = []string{deviceID}
+	}
+
+	type TargetInfo struct {
+		DeviceID string `json:"device_id"`
+		Name     string `json:"name"`
+	}
+
+	targetInfos := make([]TargetInfo, 0, len(targets))
+	targetNames := make([]string, 0, len(targets))
+
+	for _, tDev := range targets {
+		var tName string
+		_ = h.DB.QueryRow(`SELECT COALESCE(name, '') FROM users WHERE device_id = ?`, tDev).Scan(&tName)
+		displayName := tName
+		if displayName == "" {
+			displayName = tDev
+		}
+		targetInfos = append(targetInfos, TargetInfo{
+			DeviceID: tDev,
+			Name:     tName,
+		})
+		targetNames = append(targetNames, displayName)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"valid":      true,
-		"device_id":  deviceID,
-		"expires_at": expiresAt.Format(time.RFC3339),
+		"valid":        true,
+		"device_id":    deviceID,
+		"name":         ownerName,
+		"targets":      targetInfos,
+		"target_names": targetNames,
+		"expires_at":   expiresAt.Format(time.RFC3339),
 	})
 }
 
@@ -1497,11 +1670,12 @@ func (h *Handler) RejectFriendRequest(c *gin.Context) {
 func (h *Handler) ListFriends(c *gin.Context) {
 	me := c.GetString("device_id")
 	query := `
-		SELECT f.device_a, f.device_b, f.created_at, fn.nickname
+		SELECT f.device_a, f.device_b, f.created_at, fn.nickname, COALESCE(u.name, '')
 		FROM friends f
-		LEFT JOIN friend_nicknames fn ON fn.owner_device = ? AND fn.friend_device = (
+		JOIN users u ON u.device_id = (
 			CASE WHEN f.device_a = ? THEN f.device_b ELSE f.device_a END
 		)
+		LEFT JOIN friend_nicknames fn ON fn.owner_device = ? AND fn.friend_device = u.device_id
 		WHERE f.device_a = ? OR f.device_b = ?
 		ORDER BY f.created_at DESC
 	`
@@ -1517,7 +1691,8 @@ func (h *Handler) ListFriends(c *gin.Context) {
 		var a, b string
 		var created time.Time
 		var nickname sql.NullString
-		if err := rows.Scan(&a, &b, &created, &nickname); err != nil {
+		var name string
+		if err := rows.Scan(&a, &b, &created, &nickname, &name); err != nil {
 			continue
 		}
 		other := a
@@ -1530,6 +1705,7 @@ func (h *Handler) ListFriends(c *gin.Context) {
 		}
 		friends = append(friends, map[string]interface{}{
 			"device_id":  other,
+			"name":       name,
 			"nickname":   nick,
 			"created_at": created,
 		})
@@ -1646,6 +1822,7 @@ func (h *Handler) SubmitFriendsOTP(c *gin.Context) {
 
 	type TargetResult struct {
 		DeviceID string      `json:"device_id"`
+		Name     string      `json:"name"`
 		Success  bool        `json:"success"`
 		Status   int         `json:"status"`
 		Data     interface{} `json:"data,omitempty"`
@@ -1654,11 +1831,12 @@ func (h *Handler) SubmitFriendsOTP(c *gin.Context) {
 
 	results := []TargetResult{}
 	for targetDev := range targetsMap {
-		var psCookie string
-		err := h.DB.QueryRow(`SELECT ps_cookie FROM users WHERE device_id = ?`, targetDev).Scan(&psCookie)
+		var psCookie, name string
+		err := h.DB.QueryRow(`SELECT ps_cookie, COALESCE(name, '') FROM users WHERE device_id = ?`, targetDev).Scan(&psCookie, &name)
 		if err != nil {
 			results = append(results, TargetResult{
 				DeviceID: targetDev,
+				Name:     name,
 				Success:  false,
 				Status:   http.StatusNotFound,
 				Error:    "user credentials not found",
@@ -1670,6 +1848,7 @@ func (h *Handler) SubmitFriendsOTP(c *gin.Context) {
 		if err != nil {
 			results = append(results, TargetResult{
 				DeviceID: targetDev,
+				Name:     name,
 				Success:  false,
 				Status:   status,
 				Error:    err.Error(),
@@ -1682,6 +1861,7 @@ func (h *Handler) SubmitFriendsOTP(c *gin.Context) {
 
 		results = append(results, TargetResult{
 			DeviceID: targetDev,
+			Name:     name,
 			Success:  status == http.StatusOK,
 			Status:   status,
 			Data:     parsedData,
