@@ -104,10 +104,17 @@ type RegisterRequest struct {
 	DeviceID string `json:"device_id" binding:"required"`
 	PSCookie string `json:"ps_cookie" binding:"required"`
 	Name     string `json:"name"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type UpdateNameRequest struct {
 	Name string `json:"name"`
+}
+
+type UpdateQuickLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type UpdatePasswordRequest struct {
@@ -121,6 +128,20 @@ type LoginRequest struct {
 
 type OTPRequest struct {
 	OTP string `json:"otp" binding:"required"`
+}
+
+type StartActivityRequest struct {
+	ActivityID int `json:"activity_id" binding:"required"`
+}
+
+type AddParticipantsRequest struct {
+	ActivityID int `json:"activity_id" binding:"required"`
+}
+
+type TransferActivityRequest struct {
+	ActivityID int    `json:"activity_id" binding:"required"`
+	ToUser     string `json:"to_user" binding:"required"`
+	Remarks    string `json:"remarks"`
 }
 
 type FriendRequestPayload struct {
@@ -198,24 +219,37 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	// Validate against DB
-	var storedPS string
-	err := h.DB.QueryRow(`SELECT ps_cookie FROM users WHERE device_id = ?`, req.DeviceID).Scan(&storedPS)
+	var deviceID, storedPS string
+	err := h.DB.QueryRow(`
+		SELECT device_id, ps_cookie 
+		FROM users 
+		WHERE username = ? AND password = ?
+	`, req.DeviceID, req.PSCookie).Scan(&deviceID, &storedPS)
+
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "device not registered"})
-		return
-	}
-	if err != nil {
+		// Fallback to checking device_id and ps_cookie directly
+		err = h.DB.QueryRow(`SELECT ps_cookie FROM users WHERE device_id = ?`, req.DeviceID).Scan(&storedPS)
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+		if storedPS != req.PSCookie {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+		deviceID = req.DeviceID
+	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if storedPS != req.PSCookie {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
 	// Check if a session already exists for this device — reuse it
 	var existingToken string
-	err = h.DB.QueryRow(`SELECT token FROM sessions WHERE device_id = ?`, req.DeviceID).Scan(&existingToken)
+	err = h.DB.QueryRow(`SELECT token FROM sessions WHERE device_id = ?`, deviceID).Scan(&existingToken)
 	if err == nil {
 		// Already logged in — return existing token
 		setSessionCookie(c, existingToken)
@@ -234,7 +268,7 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	if _, err := h.DB.Exec(
-		`INSERT INTO sessions (device_id, token) VALUES (?, ?)`, req.DeviceID, token,
+		`INSERT INTO sessions (device_id, token) VALUES (?, ?)`, deviceID, token,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
@@ -297,7 +331,7 @@ func (h *Handler) CurrentUser(c *gin.Context) {
 
 func (h *Handler) ListUsers(c *gin.Context) {
 	rows, err := h.DB.Query(`
-		SELECT device_id, COALESCE(name, ''), created_at, updated_at
+		SELECT device_id, COALESCE(name, ''), COALESCE(username, ''), COALESCE(password, ''), created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC, device_id ASC
 	`)
@@ -310,6 +344,8 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	type userItem struct {
 		DeviceID  string    `json:"device_id"`
 		Name      string    `json:"name"`
+		Username  string    `json:"username"`
+		Password  string    `json:"password"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 		IsAdmin   bool      `json:"is_admin"`
@@ -320,7 +356,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 
 	for rows.Next() {
 		var item userItem
-		if err := rows.Scan(&item.DeviceID, &item.Name, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.DeviceID, &item.Name, &item.Username, &item.Password, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read users"})
 			return
 		}
@@ -349,18 +385,26 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	req.DeviceID = strings.TrimSpace(req.DeviceID)
 	req.PSCookie = strings.TrimSpace(req.PSCookie)
 	req.Name = strings.TrimSpace(req.Name)
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+
 	if req.DeviceID == "" || req.PSCookie == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id and ps_cookie are required"})
 		return
 	}
 
+	var usernameVal *string
+	if req.Username != "" {
+		usernameVal = &req.Username
+	}
+
 	res, err := h.DB.Exec(`
-		INSERT INTO users (device_id, ps_cookie, name)
-		VALUES (?, ?, ?)
-	`, req.DeviceID, req.PSCookie, req.Name)
+		INSERT INTO users (device_id, ps_cookie, name, username, password)
+		VALUES (?, ?, ?, ?, ?)
+	`, req.DeviceID, req.PSCookie, req.Name, usernameVal, req.Password)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate entry") {
-			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
+			c.JSON(http.StatusConflict, gin.H{"error": "user or username already exists"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
@@ -413,6 +457,53 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password updated successfully"})
+}
+
+// PATCH /api/admin/users/:device_id/quick-login
+// Admin only. Updates the user's quick login credentials.
+
+func (h *Handler) UpdateUserQuickLogin(c *gin.Context) {
+	targetDeviceID := strings.TrimSpace(c.Param("device_id"))
+	if targetDeviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id is required"})
+		return
+	}
+
+	var req UpdateQuickLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+
+	var usernameVal *string
+	if req.Username != "" {
+		usernameVal = &req.Username
+	}
+
+	res, err := h.DB.Exec(`
+		UPDATE users
+		SET username = ?, password = ?, updated_at = NOW()
+		WHERE device_id = ?
+	`, usernameVal, req.Password, targetDeviceID)
+	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update quick login credentials"})
+		return
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "quick login credentials updated successfully"})
 }
 
 // PATCH /api/admin/users/:device_id/name
@@ -500,6 +591,160 @@ func (h *Handler) ProxyOTP(c *gin.Context) {
 	body, _ := json.Marshal(map[string]string{"otp": req.OTP})
 
 	upstreamURL := buildPSURL(psQROTPEndpoint())
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Start Activity Proxy ──────────────────────────────────────────────────────
+// POST /api/activity/start-activity
+// Requires valid session token. Forwards request to bitsathy to start the activity.
+
+func (h *Handler) ProxyStartActivity(c *gin.Context) {
+	var req StartActivityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "activity_id is required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	body, _ := json.Marshal(map[string]int{"activity_id": req.ActivityID})
+
+	upstreamURL := buildPSURL("/activity/start-activity")
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Add Participants Proxy ───────────────────────────────────────────────────
+// POST /api/activity/add-participants
+// Requires valid session token. Forwards request to bitsathy to generate OTP/QR for adding participants.
+
+func (h *Handler) ProxyAddParticipants(c *gin.Context) {
+	var req AddParticipantsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "activity_id is required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	body, _ := json.Marshal(map[string]int{"activity_id": req.ActivityID})
+
+	upstreamURL := buildPSURL("/activity/add-participates")
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Transfer Activity Proxy ──────────────────────────────────────────────────
+// POST /api/activity/transfer
+// Requires valid session token. Forwards request to bitsathy to transfer activity.
+
+func (h *Handler) ProxyTransferActivity(c *gin.Context) {
+	var req TransferActivityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "activity_id and to_user are required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"activity_id": req.ActivityID,
+		"to_user":     req.ToUser,
+		"remarks":     req.Remarks,
+	})
+
+	upstreamURL := buildPSURL("/activity/transfer")
 	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})

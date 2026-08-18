@@ -94,6 +94,10 @@ export function updateAdminUserName(deviceId, payload) {
   return postJson(`/api/admin/users/${encodeURIComponent(deviceId)}/name`, payload)
 }
 
+export function updateAdminUserQuickLogin(deviceId, payload) {
+  return postJson(`/api/admin/users/${encodeURIComponent(deviceId)}/quick-login`, payload)
+}
+
 export function deleteAdminUser(deviceId) {
   return deleteJson(`/api/admin/users/${encodeURIComponent(deviceId)}`)
 }
@@ -144,6 +148,22 @@ export function getActivity(date) {
 
 export function getActivityDetails(id) {
   return getJson(`/api/activity/details?id=${encodeURIComponent(id)}`)
+}
+
+export function startActivity(activityId) {
+  return postJson('/api/activity/start-activity', { activity_id: activityId })
+}
+
+export function addParticipants(activityId) {
+  return postJson('/api/activity/add-participants', { activity_id: activityId })
+}
+
+export function transferActivity(activityId, toUser, remarks) {
+  return postJson('/api/activity/transfer', {
+    activity_id: activityId,
+    to_user: toUser,
+    remarks: remarks,
+  })
 }
 
 // ─── Share ────────────────────────────────────────────────────────────────────

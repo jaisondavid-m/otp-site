@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { createAdminUser, deleteAdminUser, listAdminUsers, updateAdminUserPassword, updateAdminUserName } from '../api/auth.js'
+import { createAdminUser, deleteAdminUser, listAdminUsers, updateAdminUserPassword, updateAdminUserName, updateAdminUserQuickLogin } from '../api/auth.js'
 
 const initialForm = {
   device_id: '',
   name: '',
   ps_cookie: '',
+  username: '',
+  password: '',
 }
 
 function AdminUsers() {
@@ -12,13 +14,46 @@ function AdminUsers() {
   const [form, setForm] = useState(initialForm)
   const [passwordForms, setPasswordForms] = useState({})
   const [nameForms, setNameForms] = useState({})
+  const [quickLoginForms, setQuickLoginForms] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [updatingDeviceId, setUpdatingDeviceId] = useState('')
   const [updatingNameDeviceId, setUpdatingNameDeviceId] = useState('')
+  const [updatingQuickLoginDeviceId, setUpdatingQuickLoginDeviceId] = useState('')
   const [deletingDeviceId, setDeletingDeviceId] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  const onQuickLoginChange = (deviceId, field, value) => {
+    setQuickLoginForms((current) => ({
+      ...current,
+      [deviceId]: {
+        ...(current[deviceId] || {}),
+        [field]: value,
+      },
+    }))
+  }
+
+  const handleQuickLoginUpdate = async (deviceId) => {
+    const user = users.find((u) => u.device_id === deviceId)
+    const formVal = quickLoginForms[deviceId] || {}
+    const nextUsername = (formVal.username !== undefined ? formVal.username : (user?.username || '')).trim()
+    const nextPassword = (formVal.password !== undefined ? formVal.password : (user?.password || '')).trim()
+
+    setUpdatingQuickLoginDeviceId(deviceId)
+    setError('')
+    setMessage('')
+
+    try {
+      await updateAdminUserQuickLogin(deviceId, { username: nextUsername, password: nextPassword })
+      setMessage('Quick login updated successfully.')
+      await loadUsers()
+    } catch (err) {
+      setError(err.message || 'Failed to update quick login credentials')
+    } finally {
+      setUpdatingQuickLoginDeviceId('')
+    }
+  }
 
   const loadUsers = async () => {
     setLoading(true)
@@ -187,15 +222,39 @@ function AdminUsers() {
                 </label>
 
                 <label>
-                  <span>Password</span>
+                  <span>Password (PS Cookie)</span>
                   <input
                     name="ps_cookie"
                     value={form.ps_cookie}
                     onChange={onChange}
-                    placeholder="Enter password"
+                    placeholder="Enter password (PS Cookie)"
                     autoComplete="off"
                     spellCheck={false}
                     required
+                  />
+                </label>
+
+                <label>
+                  <span>Username (Quick Login)</span>
+                  <input
+                    name="username"
+                    value={form.username || ''}
+                    onChange={onChange}
+                    placeholder="Enter quick login username"
+                    autoComplete="off; new-username"
+                    spellCheck={false}
+                  />
+                </label>
+
+                <label>
+                  <span>Password (Quick Login)</span>
+                  <input
+                    name="password"
+                    value={form.password || ''}
+                    onChange={onChange}
+                    placeholder="Enter quick login password"
+                    autoComplete="off; new-password"
+                    spellCheck={false}
                   />
                 </label>
 
@@ -293,6 +352,44 @@ function AdminUsers() {
                               disabled={updatingDeviceId === user.device_id}
                             >
                               {updatingDeviceId === user.device_id ? 'Saving…' : 'Update password'}
+                            </button>
+                          </form>
+
+                          <form
+                            className="admin-user-password-form"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              handleQuickLoginUpdate(user.device_id)
+                            }}
+                            style={{ marginTop: 6 }}
+                          >
+                            <input
+                              className="admin-user-password-input"
+                              type="text"
+                              value={quickLoginForms[user.device_id]?.username !== undefined ? quickLoginForms[user.device_id].username : (user.username || '')}
+                              onChange={(event) => onQuickLoginChange(user.device_id, 'username', event.target.value)}
+                              placeholder="Quick Username"
+                              autoComplete="off"
+                              spellCheck={false}
+                              style={{ width: '48%' }}
+                            />
+                            <input
+                              className="admin-user-password-input"
+                              type="text"
+                              value={quickLoginForms[user.device_id]?.password !== undefined ? quickLoginForms[user.device_id].password : (user.password || '')}
+                              onChange={(event) => onQuickLoginChange(user.device_id, 'password', event.target.value)}
+                              placeholder="Quick Password"
+                              autoComplete="off"
+                              spellCheck={false}
+                              style={{ width: '48%', marginLeft: '2%' }}
+                            />
+                            <button
+                              type="submit"
+                              className="admin-password-btn"
+                              disabled={updatingQuickLoginDeviceId === user.device_id}
+                              style={{ width: '100%', marginTop: 4 }}
+                            >
+                              {updatingQuickLoginDeviceId === user.device_id ? 'Saving…' : 'Update quick login'}
                             </button>
                           </form>
                         </main>

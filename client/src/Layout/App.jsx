@@ -6,6 +6,7 @@ import OTP from '../Pages/OTP.jsx'
 import Attendance from '../Pages/Attendance.jsx'
 import Navbar from '../Components/Navbar.jsx'
 import Activity from '../Pages/Activity.jsx'
+import ActivityDetail from '../Pages/ActivityDetail.jsx'
 import Profile from '../Pages/Profile.jsx'
 import ShareManage from '../Pages/ShareManage.jsx'
 import ShareOTP from '../Pages/ShareOTP.jsx'
@@ -132,6 +133,11 @@ function App() {
 				<Route path="/activity" element={
 					<PrivateRoute isAuthenticated={isAuthenticated}>
 						<Activity />
+					</PrivateRoute>
+				} />
+				<Route path="/activity/:id" element={
+					<PrivateRoute isAuthenticated={isAuthenticated}>
+						<ActivityDetail />
 					</PrivateRoute>
 				} />
 				<Route path="/points" element={

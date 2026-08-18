@@ -97,6 +97,8 @@ func Migrate(db *sql.DB) error {
 			device_id    VARCHAR(255) NOT NULL UNIQUE,
 			name         VARCHAR(255) DEFAULT '',
 			ps_cookie    VARCHAR(512) NOT NULL,
+			username     VARCHAR(255) UNIQUE DEFAULT NULL,
+			password     VARCHAR(255) DEFAULT '',
 			created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 		)`,
@@ -154,6 +156,9 @@ func Migrate(db *sql.DB) error {
 	// Best-effort column addition for existing databases
 	_, _ = db.Exec(`ALTER TABLE share_tokens ADD COLUMN targets_json TEXT NULL`)
 	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN name VARCHAR(255) DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN username VARCHAR(255) DEFAULT NULL`)
+	_, _ = db.Exec(`ALTER TABLE users ADD UNIQUE INDEX idx_username (username)`)
+	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN password VARCHAR(255) DEFAULT ''`)
 	return nil
 }
 
