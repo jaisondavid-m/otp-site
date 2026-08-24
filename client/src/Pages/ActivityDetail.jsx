@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getActivityDetails, formatImageUrl, startActivity, addParticipants, transferActivity } from '../api/auth.js'
+import { getActivityDetails, formatImageUrl, startActivity, addParticipants, endActivity, transferActivity } from '../api/auth.js'
 
 function getInitials(title) {
 	if (!title) return '??'
@@ -144,6 +144,7 @@ export default function ActivityDetail() {
 	const [timeLeft, setTimeLeft] = useState(0)
 	const [starting, setStarting] = useState(false)
 	const [addingParticipants, setAddingParticipants] = useState(false)
+	const [endingActivity, setEndingActivity] = useState(false)
 	const [toast, setToast] = useState(null)
 
 	const showToast = (message, type = 'error') => {
@@ -170,7 +171,7 @@ export default function ActivityDetail() {
 			const masterId = detail.parent_activity_id || detail.group_formation?.master_activity_id || detail.id
 			const res = await startActivity(masterId)
 			if (res.success && res.data) {
-				setQrData(res.data)
+				setQrData({ ...res.data, title: 'Activity Started' })
 				setTimeLeft(res.data.expire || 20)
 			} else {
 				showToast(res.message || 'Failed to start activity', 'error')
@@ -189,7 +190,7 @@ export default function ActivityDetail() {
 			const masterId = detail.parent_activity_id || detail.group_formation?.master_activity_id || detail.id
 			const res = await addParticipants(masterId)
 			if (res.success && res.data) {
-				setQrData(res.data)
+				setQrData({ ...res.data, title: 'Add Participant Code' })
 				setTimeLeft(res.data.expire || 20)
 			} else {
 				showToast(res.message || 'Failed to generate add-participant code', 'error')
@@ -198,6 +199,28 @@ export default function ActivityDetail() {
 			showToast(err.message || 'Failed to generate add-participant code', 'error')
 		} finally {
 			setAddingParticipants(false)
+		}
+	}
+
+	const handleEndActivity = async () => {
+		if (!detail) return
+		setEndingActivity(true)
+		try {
+			const masterId = detail.parent_activity_id || detail.group_formation?.master_activity_id || detail.id
+			const res = await endActivity(masterId)
+			if (res.success && res.data) {
+				setQrData({ ...res.data, title: 'End Activity Code' })
+				setTimeLeft(res.data.expire || 20)
+			} else if (res.status || res.success) {
+				showToast(res.message || 'Activity ended successfully', 'success')
+				getActivityDetails(id).then((r) => r.data && setDetail(r.data)).catch(() => {})
+			} else {
+				showToast(res.message || 'Failed to end activity', 'error')
+			}
+		} catch (err) {
+			showToast(err.message || 'Failed to end activity', 'error')
+		} finally {
+			setEndingActivity(false)
 		}
 	}
 
@@ -424,6 +447,12 @@ export default function ActivityDetail() {
 									</svg>
 									{addingParticipants ? 'Adding...' : 'Add Participant'}
 								</button>
+								<button className="ad-primary-btn" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#f87171', boxShadow: 'none', border: '1.5px solid rgba(239, 68, 68, 0.3)' }} onClick={handleEndActivity} disabled={endingActivity}>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+										<rect x="6" y="6" width="12" height="12" rx="2" />
+									</svg>
+									{endingActivity ? 'Ending...' : 'End Activity'}
+								</button>
 								<button className="ad-primary-btn" style={{ background: 'var(--red-bg)', color: 'var(--red)', boxShadow: 'none', border: '1.5px solid rgba(209, 77, 114, 0.3)' }} onClick={() => setShowTransferModal(true)}>
 									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
 										<path d="M16 3h5v5" /><path d="M4 20L21 3" /><path d="M21 16v5h-5" /><path d="M15 15l6 6" /><path d="M4 4l5 5" />
@@ -535,8 +564,8 @@ export default function ActivityDetail() {
 						<button className="ad-modal-close" onClick={() => setQrData(null)}>✕</button>
 						
 						<div className="ad-modal-header">
-							<h3>Activity Started</h3>
-							<p>Scan the QR code or enter the OTP to join</p>
+							<h3>{qrData.title || 'Activity Code'}</h3>
+							<p>Scan the QR code or enter the OTP</p>
 						</div>
 
 						<div className="ad-modal-qr-container">

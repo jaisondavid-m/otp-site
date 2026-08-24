@@ -138,6 +138,11 @@ type AddParticipantsRequest struct {
 	ActivityID int `json:"activity_id" binding:"required"`
 }
 
+type EndActivityRequest struct {
+	ActivityID int `json:"activity_id" binding:"required"`
+}
+
+
 type TransferActivityRequest struct {
 	ActivityID int    `json:"activity_id" binding:"required"`
 	ToUser     string `json:"to_user" binding:"required"`
@@ -724,6 +729,57 @@ func (h *Handler) ProxyAddParticipants(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
+// ─── End Activity Proxy ───────────────────────────────────────────────────────
+// POST /api/activity/end-activity
+// Requires valid session token. Forwards request to bitsathy to end the activity.
+
+func (h *Handler) ProxyEndActivity(c *gin.Context) {
+	var req EndActivityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "activity_id is required"})
+		return
+	}
+
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	body, _ := json.Marshal(map[string]int{"activity_id": req.ActivityID})
+
+	upstreamURL := buildPSURL("/activity/end-activity/v2")
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+
 // ─── Transfer Activity Proxy ──────────────────────────────────────────────────
 // POST /api/activity/transfer
 // Requires valid session token. Forwards request to bitsathy to transfer activity.
@@ -926,6 +982,99 @@ func (h *Handler) ProxyPendingAction(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
+// ─── Pending Action V2 Proxy ──────────────────────────────────────────────────
+// GET /api/pending-action/v2?date=YYYY-MM-DD
+// Requires valid session token. Fetches pending actions v2 from bitsathy API.
+
+func (h *Handler) ProxyPendingActionV2(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	date := c.Query("date")
+	path := "/activity/pending-action/v2"
+	if date != "" {
+		path += "?date=" + date
+	}
+
+	upstreamURL := buildPSURL(path)
+	upstreamReq, err := http.NewRequest(http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// ─── Submit Pending Action Proxy ──────────────────────────────────────────────
+// POST /api/pending-action
+// Requires valid session token. Forwards accept/transfer action to bitsathy API.
+
+func (h *Handler) ProxySubmitPendingAction(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+		return
+	}
+
+	upstreamURL := buildPSURL("/activity/pending-action")
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
 // ─── Activity Proxy ───────────────────────────────────────────────────────────
 // GET /api/activity?date=YYYY-MM-DD
 // Requires valid session token. Fetches activity from bitsathy API.
@@ -975,6 +1124,62 @@ func (h *Handler) ProxyActivity(c *gin.Context) {
 
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
+
+// ─── Create Activity Proxy ────────────────────────────────────────────────────
+// POST /api/activity
+// Requires valid session token. Forwards request body to bitsathy /activity or /activity/v2 endpoint.
+
+func (h *Handler) ProxyCreateActivity(c *gin.Context) {
+	psCookie := c.GetString("ps_cookie")
+	deviceID := c.GetString("device_id")
+
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+		return
+	}
+
+	enableV2 := c.Query("enable_activity_v2") == "true" || c.Query("v2") == "true"
+
+	path := "/activity"
+	if enableV2 {
+		path = "/activity/v2"
+	}
+
+	upstreamURL := buildPSURL(path)
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build upstream request"})
+		return
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json, text/plain, */*")
+	upstreamReq.Header.Set("Accept-Language", "en-IN,en;q=0.9")
+	upstreamReq.Header.Set("User-Agent", "ps_student/1 CFNetwork/3860.200.71 Darwin/25.1.0")
+	upstreamReq.Header.Set("Priority", "u=3, i")
+	upstreamReq.Header.Set("Accept-Encoding", "identity")
+
+	upstreamReq.AddCookie(&http.Cookie{Name: "PS", Value: psCookie})
+	upstreamReq.AddCookie(&http.Cookie{Name: "Device-Identifier", Value: deviceID})
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("upstream request failed: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
 
 // ─── Profile Proxy ────────────────────────────────────────────────────────────
 // GET /api/profile

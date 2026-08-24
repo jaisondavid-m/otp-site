@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getActivity, formatImageUrl } from '../api/auth.js'
+import { getActivity, createActivity, formatImageUrl } from '../api/auth.js'
 
 function toDateInputValue(date = new Date()) {
 	const offset = date.getTimezoneOffset() * 60 * 1000
@@ -124,25 +124,50 @@ function Activity() {
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState('')
 
-	useEffect(() => {
-		let active = true
-		const load = async () => {
-			setLoading(true)
-			setError('')
-			try {
-				const res = await getActivity(selectedDate)
-				if (active) setActivities(res.data ?? [])
-			} catch (err) {
-				if (active) {
-					setActivities([])
-					setError(err.message || 'Failed to load activities')
-				}
-			} finally {
-				if (active) setLoading(false)
-			}
+	// Create Activity Modal State
+	const [showCreateModal, setShowCreateModal] = useState(false)
+	const [creating, setCreating] = useState(false)
+	const [toast, setToast] = useState(null)
+
+	const [form, setForm] = useState({
+		category_id: 4112,
+		from_date: toDateInputValue(),
+		to_date: toDateInputValue(),
+		start_time: '08:45:00',
+		end_time: '16:25:00',
+		user_ids: '2025UCS1023',
+		users: [
+			{ id: '2025UCS1023', name: 'jaison david m', role: 'participant' },
+			{ id: '2025UCS1022', name: 'jagaprasanth p', role: 'participant' }
+		],
+		description: 'testing session',
+		is_package: false,
+		is_single_activity: true,
+		enable_activity_v2: false,
+		repeat_enabled: false
+	})
+
+	const showToast = (message, type = 'error') => {
+		setToast({ message, type })
+		setTimeout(() => setToast(null), 4000)
+	}
+
+	const fetchActivities = async (date) => {
+		setLoading(true)
+		setError('')
+		try {
+			const res = await getActivity(date)
+			setActivities(res.data ?? [])
+		} catch (err) {
+			setActivities([])
+			setError(err.message || 'Failed to load activities')
+		} finally {
+			setLoading(false)
 		}
-		load()
-		return () => { active = false }
+	}
+
+	useEffect(() => {
+		fetchActivities(selectedDate)
 	}, [selectedDate])
 
 	const stats = useMemo(() => {
@@ -159,6 +184,79 @@ function Activity() {
 		{ label: 'Active',   value: loading ? '--' : stats.active,     description: 'Ongoing sessions'   },
 		{ label: 'Subjects', value: loading ? '--' : stats.categories, description: 'Unique categories'  },
 	]
+
+	const handleAddUser = () => {
+		setForm((prev) => ({
+			...prev,
+			users: [...prev.users, { id: '', name: '', role: 'participant' }]
+		}))
+	}
+
+	const handleRemoveUser = (index) => {
+		setForm((prev) => ({
+			...prev,
+			users: prev.users.filter((_, i) => i !== index)
+		}))
+	}
+
+	const handleUserChange = (index, field, value) => {
+		setForm((prev) => {
+			const updatedUsers = [...prev.users]
+			updatedUsers[index] = { ...updatedUsers[index], [field]: value }
+			return { ...prev, users: updatedUsers }
+		})
+	}
+
+	const handleCreateSubmit = async (e) => {
+		e.preventDefault()
+		setCreating(true)
+		try {
+			const userIdsArr = form.user_ids
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean)
+
+			const payload = {
+				category_id: Number(form.category_id),
+				from_date: form.from_date,
+				to_date: form.to_date,
+				start_time: form.start_time,
+				end_time: form.end_time,
+				user_ids: userIdsArr,
+				users: form.users,
+				user: form.users,
+				is_package: form.is_package,
+				description: form.description,
+				repeat: form.repeat_enabled
+					? {
+							enabled: true,
+							repeat_type: 'daily',
+							repeat_interval: 1,
+							include_sunday: false,
+							week_days: [],
+							month_day: 0,
+							custom_dates: [],
+							repeat_end_date: form.to_date,
+							occurrence_count: 1
+					  }
+					: { enabled: false },
+				is_single_activity: form.is_single_activity
+			}
+
+			const res = await createActivity(payload, form.enable_activity_v2)
+			if (res.status || res.success) {
+				showToast(res.message || 'Activity created successfully!', 'success')
+				setShowCreateModal(false)
+				fetchActivities(selectedDate)
+			} else {
+				showToast(res.message || res.error || 'Failed to create activity', 'error')
+			}
+		} catch (err) {
+			showToast(err.message || 'Failed to create activity', 'error')
+		} finally {
+			setCreating(false)
+		}
+	}
 
 	return (
 		<main className="activity-shell">
@@ -184,6 +282,17 @@ function Activity() {
 							onClick={() => setSelectedDate(toDateInputValue())}
 						>
 							Today
+						</button>
+						<button
+							type="button"
+							className="ad-primary-btn"
+							style={{ marginLeft: 'auto', background: 'var(--accent)', color: '#fff' }}
+							onClick={() => setShowCreateModal(true)}
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+								<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+							</svg>
+							Create Activity
 						</button>
 					</div>
 
@@ -220,6 +329,202 @@ function Activity() {
 
 				</div>
 			</section>
+
+			{/* Create Activity Modal */}
+			{showCreateModal && (
+				<div className="ad-modal-overlay" onClick={() => setShowCreateModal(false)}>
+					<div className="ad-modal-content" style={{ maxWidth: '580px', textAlign: 'left', alignItems: 'stretch', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+						<button className="ad-modal-close" onClick={() => setShowCreateModal(false)}>✕</button>
+
+						<div className="ad-modal-header" style={{ textAlign: 'center', marginBottom: '14px' }}>
+							<h3>Create Activity</h3>
+							<p>Fill out activity payload parameters to post session</p>
+						</div>
+
+						<form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Category ID</label>
+									<input
+										type="number"
+										value={form.category_id}
+										onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+										required
+										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
+									/>
+								</div>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Description</label>
+									<input
+										type="text"
+										value={form.description}
+										onChange={(e) => setForm({ ...form, description: e.target.value })}
+										required
+										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
+									/>
+								</div>
+							</div>
+
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>From Date</label>
+									<input
+										type="date"
+										value={form.from_date}
+										onChange={(e) => setForm({ ...form, from_date: e.target.value })}
+										required
+										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
+									/>
+								</div>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>To Date</label>
+									<input
+										type="date"
+										value={form.to_date}
+										onChange={(e) => setForm({ ...form, to_date: e.target.value })}
+										required
+										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
+									/>
+								</div>
+							</div>
+
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Start Time</label>
+									<input
+										type="text"
+										placeholder="08:45:00"
+										value={form.start_time}
+										onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+										required
+										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
+									/>
+								</div>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>End Time</label>
+									<input
+										type="text"
+										placeholder="16:25:00"
+										value={form.end_time}
+										onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+										required
+										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
+									/>
+								</div>
+							</div>
+
+							<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+								<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>User IDs (comma separated string array)</label>
+								<input
+									type="text"
+									placeholder="2025UCS1023"
+									value={form.user_ids}
+									onChange={(e) => setForm({ ...form, user_ids: e.target.value })}
+									required
+									style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
+								/>
+							</div>
+
+							{/* Users List */}
+							<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+								<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+									<label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)' }}>Users Array ({form.users.length})</label>
+									<button
+										type="button"
+										onClick={handleAddUser}
+										style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-md)', padding: '4px 10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+									>
+										+ Add User
+									</button>
+								</div>
+								{form.users.map((u, idx) => (
+									<div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '8px', alignItems: 'center' }}>
+										<input
+											type="text"
+											placeholder="User ID"
+											value={u.id}
+											onChange={(e) => handleUserChange(idx, 'id', e.target.value)}
+											style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
+										/>
+										<input
+											type="text"
+											placeholder="Name"
+											value={u.name}
+											onChange={(e) => handleUserChange(idx, 'name', e.target.value)}
+											style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none' }}
+										/>
+										<input
+											type="text"
+											placeholder="Role"
+											value={u.role}
+											onChange={(e) => handleUserChange(idx, 'role', e.target.value)}
+											style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none' }}
+										/>
+										<button
+											type="button"
+											onClick={() => handleRemoveUser(idx)}
+											style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: 'none', borderRadius: '50%', width: '26px', height: '26px', fontSize: '12px', cursor: 'pointer' }}
+										>
+											✕
+										</button>
+									</div>
+								))}
+							</div>
+
+							<div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--border)' }}>
+								<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+									<input
+										type="checkbox"
+										checked={form.enable_activity_v2}
+										onChange={(e) => setForm({ ...form, enable_activity_v2: e.target.checked })}
+									/>
+									Enable Activity V2
+								</label>
+								<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+									<input
+										type="checkbox"
+										checked={form.is_single_activity}
+										onChange={(e) => setForm({ ...form, is_single_activity: e.target.checked })}
+									/>
+									Single Activity
+								</label>
+								<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+									<input
+										type="checkbox"
+										checked={form.is_package}
+										onChange={(e) => setForm({ ...form, is_package: e.target.checked })}
+									/>
+									Is Package
+								</label>
+							</div>
+
+							<div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+								<button
+									type="button"
+									onClick={() => setShowCreateModal(false)}
+									style={{ flex: 1, background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', padding: '10px', fontWeight: '600', cursor: 'pointer' }}
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={creating}
+									style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', padding: '10px', fontWeight: '600', cursor: 'pointer', opacity: creating ? 0.7 : 1 }}
+								>
+									{creating ? 'Creating...' : 'Create Activity'}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			)}
+
+			{toast && (
+				<div className={`ad-toast ad-toast-${toast.type}`}>
+					<span>{toast.type === 'success' ? '✓' : '⚠'}</span>
+					<p>{toast.message}</p>
+				</div>
+			)}
 		</main>
 	)
 }

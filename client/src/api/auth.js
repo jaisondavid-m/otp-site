@@ -140,6 +140,23 @@ export function getPendingActions(query = 'today=yes') {
   return getJson(`/api/pending-action${suffix}`)
 }
 
+export function getPendingActionsV2(date = '') {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  return getJson(`/api/pending-action/v2${query}`)
+}
+
+export function acceptPendingAction(id) {
+  return postJson('/api/pending-action', {
+    id: Number(id),
+    status: '1',
+    remarks: 'Activity accepted',
+    selected_user: '',
+    selected_username: '',
+    survey_id: 0,
+    is_transfer: false
+  })
+}
+
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
 export function getActivity(date) {
@@ -150,12 +167,21 @@ export function getActivityDetails(id) {
   return getJson(`/api/activity/details?id=${encodeURIComponent(id)}`)
 }
 
+export function createActivity(payload, enableV2 = false) {
+  const query = enableV2 ? '?enable_activity_v2=true' : ''
+  return postJson(`/api/activity${query}`, payload)
+}
+
 export function startActivity(activityId) {
   return postJson('/api/activity/start-activity', { activity_id: activityId })
 }
 
 export function addParticipants(activityId) {
   return postJson('/api/activity/add-participants', { activity_id: activityId })
+}
+
+export function endActivity(activityId) {
+  return postJson('/api/activity/end-activity', { activity_id: activityId })
 }
 
 export function transferActivity(activityId, toUser, remarks) {
