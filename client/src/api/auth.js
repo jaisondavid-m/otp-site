@@ -176,8 +176,8 @@ export function startActivity(activityId) {
   return postJson('/api/activity/start-activity', { activity_id: activityId })
 }
 
-export function addParticipants(activityId) {
-  return postJson('/api/activity/add-participants', { activity_id: activityId })
+export function addParticipants(activityId, startStop = true) {
+  return postJson('/api/activity/add-participants', { activity_id: activityId, start_stop: startStop })
 }
 
 export function endActivity(activityId) {

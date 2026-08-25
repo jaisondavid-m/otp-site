@@ -129,23 +129,24 @@ function Activity() {
 	const [creating, setCreating] = useState(false)
 	const [toast, setToast] = useState(null)
 
-	const [form, setForm] = useState({
-		category_id: 4112,
+	const INITIAL_FORM_STATE = {
+		category_id: '',
 		from_date: toDateInputValue(),
 		to_date: toDateInputValue(),
-		start_time: '08:45:00',
-		end_time: '16:25:00',
-		user_ids: '2025UCS1023',
-		users: [
-			{ id: '2025UCS1023', name: 'jaison david m', role: 'participant' },
-			{ id: '2025UCS1022', name: 'jagaprasanth p', role: 'participant' }
-		],
-		description: 'testing session',
+		start_time: '',
+		end_time: '',
+		user_ids: '',
+		users: [],
+		description: '',
 		is_package: false,
 		is_single_activity: true,
 		enable_activity_v2: false,
 		repeat_enabled: false
-	})
+	}
+
+	const [form, setForm] = useState(INITIAL_FORM_STATE)
+
+	const resetForm = () => setForm(INITIAL_FORM_STATE)
 
 	const showToast = (message, type = 'error') => {
 		setToast({ message, type })
@@ -287,7 +288,10 @@ function Activity() {
 							type="button"
 							className="ad-primary-btn"
 							style={{ marginLeft: 'auto', background: 'var(--accent)', color: '#fff' }}
-							onClick={() => setShowCreateModal(true)}
+							onClick={() => {
+								resetForm()
+								setShowCreateModal(true)
+							}}
 						>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
 								<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -332,186 +336,268 @@ function Activity() {
 
 			{/* Create Activity Modal */}
 			{showCreateModal && (
-				<div className="ad-modal-overlay" onClick={() => setShowCreateModal(false)}>
-					<div className="ad-modal-content" style={{ maxWidth: '580px', textAlign: 'left', alignItems: 'stretch', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-						<button className="ad-modal-close" onClick={() => setShowCreateModal(false)}>✕</button>
-
-						<div className="ad-modal-header" style={{ textAlign: 'center', marginBottom: '14px' }}>
-							<h3>Create Activity</h3>
-							<p>Fill out activity payload parameters to post session</p>
+				<div className="cam-overlay" onClick={() => setShowCreateModal(false)}>
+					<div className="cam-modal" onClick={(e) => e.stopPropagation()}>
+						{/* Header */}
+						<div className="cam-header">
+							<div className="cam-header-info">
+								<div className="cam-header-icon">
+									<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+										<rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+										<line x1="16" y1="2" x2="16" y2="6" />
+										<line x1="8" y1="2" x2="8" y2="6" />
+										<line x1="3" y1="10" x2="21" y2="10" />
+										<line x1="12" y1="14" x2="12" y2="18" />
+										<line x1="10" y1="16" x2="14" y2="16" />
+									</svg>
+								</div>
+								<div className="cam-header-text">
+									<h3>Create Activity</h3>
+									<p>Fill out activity parameters to post session</p>
+								</div>
+							</div>
+							<button className="cam-close-btn" onClick={() => setShowCreateModal(false)} type="button" aria-label="Close">
+								✕
+							</button>
 						</div>
 
-						<form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Category ID</label>
-									<input
-										type="number"
-										value={form.category_id}
-										onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-										required
-										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
-									/>
-								</div>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Description</label>
-									<input
-										type="text"
-										value={form.description}
-										onChange={(e) => setForm({ ...form, description: e.target.value })}
-										required
-										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
-									/>
-								</div>
-							</div>
+						{/* Form */}
+						<form onSubmit={handleCreateSubmit} style={{ display: 'contents' }}>
+							<div className="cam-body">
 
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>From Date</label>
-									<input
-										type="date"
-										value={form.from_date}
-										onChange={(e) => setForm({ ...form, from_date: e.target.value })}
-										required
-										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
-									/>
-								</div>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>To Date</label>
-									<input
-										type="date"
-										value={form.to_date}
-										onChange={(e) => setForm({ ...form, to_date: e.target.value })}
-										required
-										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none' }}
-									/>
-								</div>
-							</div>
-
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Start Time</label>
-									<input
-										type="text"
-										placeholder="08:45:00"
-										value={form.start_time}
-										onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-										required
-										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
-									/>
-								</div>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-									<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>End Time</label>
-									<input
-										type="text"
-										placeholder="16:25:00"
-										value={form.end_time}
-										onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-										required
-										style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
-									/>
-								</div>
-							</div>
-
-							<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-								<label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>User IDs (comma separated string array)</label>
-								<input
-									type="text"
-									placeholder="2025UCS1023"
-									value={form.user_ids}
-									onChange={(e) => setForm({ ...form, user_ids: e.target.value })}
-									required
-									style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
-								/>
-							</div>
-
-							{/* Users List */}
-							<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
-								<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-									<label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)' }}>Users Array ({form.users.length})</label>
-									<button
-										type="button"
-										onClick={handleAddUser}
-										style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-md)', padding: '4px 10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-									>
-										+ Add User
-									</button>
-								</div>
-								{form.users.map((u, idx) => (
-									<div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '8px', alignItems: 'center' }}>
-										<input
-											type="text"
-											placeholder="User ID"
-											value={u.id}
-											onChange={(e) => handleUserChange(idx, 'id', e.target.value)}
-											style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-mono)' }}
-										/>
-										<input
-											type="text"
-											placeholder="Name"
-											value={u.name}
-											onChange={(e) => handleUserChange(idx, 'name', e.target.value)}
-											style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none' }}
-										/>
-										<input
-											type="text"
-											placeholder="Role"
-											value={u.role}
-											onChange={(e) => handleUserChange(idx, 'role', e.target.value)}
-											style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none' }}
-										/>
-										<button
-											type="button"
-											onClick={() => handleRemoveUser(idx)}
-											style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: 'none', borderRadius: '50%', width: '26px', height: '26px', fontSize: '12px', cursor: 'pointer' }}
-										>
-											✕
-										</button>
+								{/* Basic Info Section */}
+								<div className="cam-section">
+									<div className="cam-section-title">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+										General Info
 									</div>
-								))}
+									<div className="cam-grid-2">
+										<div className="cam-field">
+											<label className="cam-label">
+												Category ID <span style={{ color: 'var(--red)' }}>*</span>
+											</label>
+											<input
+												type="number"
+												placeholder="e.g. 4112"
+												value={form.category_id}
+												onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+												required
+												className="cam-input cam-input-mono"
+											/>
+										</div>
+										<div className="cam-field">
+											<label className="cam-label">
+												Description <span style={{ color: 'var(--red)' }}>*</span>
+											</label>
+											<input
+												type="text"
+												placeholder="e.g. Operating Systems Lab Session"
+												value={form.description}
+												onChange={(e) => setForm({ ...form, description: e.target.value })}
+												required
+												className="cam-input"
+											/>
+										</div>
+									</div>
+								</div>
+
+								{/* Schedule Section */}
+								<div className="cam-section">
+									<div className="cam-section-title">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+										Schedule & Timing
+									</div>
+									<div className="cam-grid-2">
+										<div className="cam-field">
+											<label className="cam-label">From Date</label>
+											<input
+												type="date"
+												value={form.from_date}
+												onChange={(e) => setForm({ ...form, from_date: e.target.value })}
+												required
+												className="cam-input"
+											/>
+										</div>
+										<div className="cam-field">
+											<label className="cam-label">To Date</label>
+											<input
+												type="date"
+												value={form.to_date}
+												onChange={(e) => setForm({ ...form, to_date: e.target.value })}
+												required
+												className="cam-input"
+											/>
+										</div>
+									</div>
+
+									<div className="cam-grid-2">
+										<div className="cam-field">
+											<label className="cam-label">
+												Start Time <span className="cam-label-sub">(HH:MM:SS)</span>
+											</label>
+											<input
+												type="text"
+												placeholder="e.g. 08:45:00"
+												value={form.start_time}
+												onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+												required
+												className="cam-input cam-input-mono"
+											/>
+										</div>
+										<div className="cam-field">
+											<label className="cam-label">
+												End Time <span className="cam-label-sub">(HH:MM:SS)</span>
+											</label>
+											<input
+												type="text"
+												placeholder="e.g. 16:25:00"
+												value={form.end_time}
+												onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+												required
+												className="cam-input cam-input-mono"
+											/>
+										</div>
+									</div>
+								</div>
+
+								{/* Users Section */}
+								<div className="cam-section">
+									<div className="cam-section-title">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+										Participants & User IDs
+									</div>
+
+									<div className="cam-field">
+										<label className="cam-label">
+											User IDs <span className="cam-label-sub">Comma separated string array</span>
+										</label>
+										<input
+											type="text"
+											placeholder="e.g. 2025UCS1023, 2025UCS1022"
+											value={form.user_ids}
+											onChange={(e) => setForm({ ...form, user_ids: e.target.value })}
+											className="cam-input cam-input-mono"
+										/>
+									</div>
+
+									<div className="cam-field">
+										<div className="cam-users-header">
+											<label className="cam-label">
+												Users Array ({form.users.length})
+											</label>
+											<button
+												type="button"
+												className="cam-add-user-btn"
+												onClick={handleAddUser}
+											>
+												+ Add User
+											</button>
+										</div>
+
+										{form.users.length === 0 ? (
+											<div className="cam-empty-users">
+												No user objects added. Click <strong>+ Add User</strong> above to specify user details.
+											</div>
+										) : (
+											<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+												{form.users.map((u, idx) => (
+													<div key={idx} className="cam-user-row">
+														<input
+															type="text"
+															placeholder="User ID"
+															value={u.id}
+															onChange={(e) => handleUserChange(idx, 'id', e.target.value)}
+															className="cam-input cam-input-mono"
+														/>
+														<input
+															type="text"
+															placeholder="Full Name"
+															value={u.name}
+															onChange={(e) => handleUserChange(idx, 'name', e.target.value)}
+															className="cam-input"
+														/>
+														<input
+															type="text"
+															placeholder="Role"
+															value={u.role}
+															onChange={(e) => handleUserChange(idx, 'role', e.target.value)}
+															className="cam-input"
+														/>
+														<button
+															type="button"
+															className="cam-remove-user-btn"
+															onClick={() => handleRemoveUser(idx)}
+															title="Remove user"
+														>
+															✕
+														</button>
+													</div>
+												))}
+											</div>
+										)}
+									</div>
+								</div>
+
+								{/* Options Section */}
+								<div className="cam-section">
+									<div className="cam-section-title">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+										Activity Options
+									</div>
+									<div className="cam-checkbox-group">
+										<label className={`cam-checkbox-chip ${form.is_single_activity ? 'active' : ''}`}>
+											<input
+												type="checkbox"
+												checked={form.is_single_activity}
+												onChange={(e) => setForm({ ...form, is_single_activity: e.target.checked })}
+											/>
+											Single Activity
+										</label>
+
+										<label className={`cam-checkbox-chip ${form.enable_activity_v2 ? 'active' : ''}`}>
+											<input
+												type="checkbox"
+												checked={form.enable_activity_v2}
+												onChange={(e) => setForm({ ...form, enable_activity_v2: e.target.checked })}
+											/>
+											Enable Activity V2
+										</label>
+
+										<label className={`cam-checkbox-chip ${form.is_package ? 'active' : ''}`}>
+											<input
+												type="checkbox"
+												checked={form.is_package}
+												onChange={(e) => setForm({ ...form, is_package: e.target.checked })}
+											/>
+											Is Package
+										</label>
+									</div>
+								</div>
+
 							</div>
 
-							<div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--border)' }}>
-								<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
-									<input
-										type="checkbox"
-										checked={form.enable_activity_v2}
-										onChange={(e) => setForm({ ...form, enable_activity_v2: e.target.checked })}
-									/>
-									Enable Activity V2
-								</label>
-								<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
-									<input
-										type="checkbox"
-										checked={form.is_single_activity}
-										onChange={(e) => setForm({ ...form, is_single_activity: e.target.checked })}
-									/>
-									Single Activity
-								</label>
-								<label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
-									<input
-										type="checkbox"
-										checked={form.is_package}
-										onChange={(e) => setForm({ ...form, is_package: e.target.checked })}
-									/>
-									Is Package
-								</label>
-							</div>
-
-							<div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+							{/* Footer */}
+							<div className="cam-footer">
 								<button
 									type="button"
+									className="cam-btn-secondary"
 									onClick={() => setShowCreateModal(false)}
-									style={{ flex: 1, background: 'var(--bg-input)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', padding: '10px', fontWeight: '600', cursor: 'pointer' }}
 								>
 									Cancel
 								</button>
 								<button
 									type="submit"
 									disabled={creating}
-									style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', padding: '10px', fontWeight: '600', cursor: 'pointer', opacity: creating ? 0.7 : 1 }}
+									className="cam-btn-primary"
 								>
-									{creating ? 'Creating...' : 'Create Activity'}
+									{creating ? (
+										<>
+											<span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }} />
+											Creating...
+										</>
+									) : (
+										'Create Activity'
+									)}
 								</button>
 							</div>
 						</form>

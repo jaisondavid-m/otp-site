@@ -3624,3 +3624,349 @@ body {
 .password-toggle-btn:hover {
   color: var(--text-primary);
 }
+
+/* ─── Create Activity Modal ───────────────────────────────── */
+.cam-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 15, 30, 0.55);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: camFadeIn 0.2s ease-out;
+}
+
+.cam-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px -10px rgba(110, 86, 207, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  animation: camScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cam-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-raised);
+}
+
+.cam-header-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cam-header-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-dim);
+  border: 1px solid var(--border-accent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cam-header-text h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.cam-header-text p {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.cam-close-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.cam-close-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.cam-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cam-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cam-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cam-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 540px) {
+  .cam-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cam-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cam-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cam-label-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.cam-input {
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 9px 13px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all var(--transition);
+  width: 100%;
+}
+
+.cam-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  background: var(--bg-card);
+}
+
+.cam-input-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.cam-users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cam-add-user-btn {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1.5px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.cam-add-user-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.cam-empty-users {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  background: var(--bg-raised);
+}
+
+.cam-user-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  padding: 8px;
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 540px) {
+  .cam-user-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cam-remove-user-btn {
+  background: rgba(209, 77, 114, 0.1);
+  color: var(--red);
+  border: 1px solid rgba(209, 77, 114, 0.2);
+  border-radius: var(--radius-sm);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.cam-remove-user-btn:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+.cam-checkbox-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cam-checkbox-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-raised);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition);
+}
+
+.cam-checkbox-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.cam-checkbox-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.cam-checkbox-chip input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.cam-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cam-btn-secondary {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 9px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.cam-btn-secondary:hover {
+  background: var(--bg-hover);
+}
+
+.cam-btn-primary {
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 9px 22px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(110, 86, 207, 0.3);
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cam-btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(110, 86, 207, 0.4);
+}
+
+.cam-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@keyframes camFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes camScaleIn {
+  from { transform: scale(0.96) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+

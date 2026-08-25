@@ -135,7 +135,8 @@ type StartActivityRequest struct {
 }
 
 type AddParticipantsRequest struct {
-	ActivityID int `json:"activity_id" binding:"required"`
+	ActivityID int   `json:"activity_id" binding:"required"`
+	StartStop  *bool `json:"start_stop,omitempty"`
 }
 
 type EndActivityRequest struct {
@@ -693,7 +694,15 @@ func (h *Handler) ProxyAddParticipants(c *gin.Context) {
 	psCookie := c.GetString("ps_cookie")
 	deviceID := c.GetString("device_id")
 
-	body, _ := json.Marshal(map[string]int{"activity_id": req.ActivityID})
+	startStop := true
+	if req.StartStop != nil {
+		startStop = *req.StartStop
+	}
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"activity_id": req.ActivityID,
+		"start_stop":  startStop,
+	})
 
 	upstreamURL := buildPSURL("/activity/add-participates")
 	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, bytes.NewReader(body))
